@@ -23,11 +23,7 @@ export default function Navbar() {
   ];
 
   return (
-    <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-colors duration-300 ${
-        scrolled ? "bg-background/95 backdrop-blur-sm border-b border-border shadow-sm" : "bg-transparent"
-      }`}
-    >
+    <header className="fixed top-0 left-0 right-0 z-50 bg-primary shadow-md border-b border-primary/20">
       <div className="container mx-auto px-6 h-24 flex items-center justify-between">
         <Link href="/" className="flex items-center" data-testid="link-home-logo">
           <img src={tbheLogo} alt="The Beverly Hills Estates" className="h-10 w-auto" />
@@ -39,11 +35,7 @@ export default function Navbar() {
               href={link.href}
               data-testid={`link-nav-${link.label.toLowerCase().replace(" ", "-")}`}
               className={`text-sm tracking-wider uppercase font-sans transition-colors hover:text-secondary ${
-                location === link.href
-                  ? "text-secondary"
-                  : scrolled
-                  ? "text-foreground"
-                  : "text-white"
+                location === link.href ? "text-secondary" : "text-white"
               }`}
             >
               {link.label}
@@ -52,8 +44,10 @@ export default function Navbar() {
           <Link
             href="/contact"
             data-testid="link-nav-contact-cta"
-            className={`px-6 py-3 text-sm tracking-wider uppercase font-sans transition-all border bg-primary text-primary-foreground border-primary active:bg-secondary active:border-secondary hover:opacity-90 ${
-              location === "/contact" ? "bg-secondary border-secondary" : ""
+            className={`px-6 py-3 text-sm tracking-wider uppercase font-sans transition-all border ${
+              location === "/contact"
+                ? "bg-secondary border-secondary text-white"
+                : "bg-transparent border-white text-white hover:bg-white hover:text-primary"
             }`}
           >
             Private Consultation
