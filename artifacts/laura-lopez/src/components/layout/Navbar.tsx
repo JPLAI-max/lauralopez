@@ -18,6 +18,8 @@ export default function Navbar() {
     { href: "/about", label: "About" },
     { href: "/market-intelligence", label: "Intelligence" },
     { href: "/top-picks", label: "Top Picks" },
+    { href: "/listings", label: "Listings" },
+    { href: "/sold", label: "Sold" },
   ];
 
   return (
@@ -37,7 +39,11 @@ export default function Navbar() {
               href={link.href}
               data-testid={`link-nav-${link.label.toLowerCase().replace(" ", "-")}`}
               className={`text-sm tracking-wider uppercase font-sans transition-colors hover:text-secondary ${
-                location === link.href ? "text-secondary" : scrolled ? "text-foreground" : "text-white"
+                location === link.href
+                  ? "text-secondary"
+                  : scrolled
+                  ? "text-foreground"
+                  : "text-white"
               }`}
             >
               {link.label}
@@ -46,10 +52,8 @@ export default function Navbar() {
           <Link
             href="/contact"
             data-testid="link-nav-contact-cta"
-            className={`px-6 py-3 text-sm tracking-wider uppercase font-sans transition-all border ${
-              scrolled
-                ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                : "bg-transparent text-white border-white hover:bg-white hover:text-primary"
+            className={`px-6 py-3 text-sm tracking-wider uppercase font-sans transition-all border bg-primary text-primary-foreground border-primary active:bg-secondary active:border-secondary hover:opacity-90 ${
+              location === "/contact" ? "bg-secondary border-secondary" : ""
             }`}
           >
             Private Consultation

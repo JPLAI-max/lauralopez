@@ -9,6 +9,8 @@ import About from "@/pages/About";
 import MarketIntelligence from "@/pages/MarketIntelligence";
 import TopPicks from "@/pages/TopPicks";
 import Contact from "@/pages/Contact";
+import Listings from "@/pages/Listings";
+import Sold from "@/pages/Sold";
 
 const queryClient = new QueryClient();
 
@@ -21,6 +23,8 @@ function Router() {
         <Route path="/market-intelligence" component={MarketIntelligence} />
         <Route path="/top-picks" component={TopPicks} />
         <Route path="/contact" component={Contact} />
+        <Route path="/listings" component={Listings} />
+        <Route path="/sold" component={Sold} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
