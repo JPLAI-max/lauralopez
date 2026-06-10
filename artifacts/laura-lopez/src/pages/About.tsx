@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Link } from "wouter";
+import lauraPortrait from "@assets/IMG_0163_1781123890306.jpeg";
 
 const fadeUpVariant = {
   hidden: { opacity: 0, y: 30 },
@@ -48,9 +49,9 @@ export default function About() {
             <div className="w-full lg:w-1/2 order-1 lg:order-2">
               <div className="aspect-[3/4] bg-card p-4">
                 <img 
-                  src="/images/laura-portrait.png" 
-                  alt="Laura Lopez Portrait" 
-                  className="w-full h-full object-cover filter grayscale-[10%]"
+                  src={lauraPortrait} 
+                  alt="Laura Lopez" 
+                  className="w-full h-full object-cover"
                 />
               </div>
             </div>
