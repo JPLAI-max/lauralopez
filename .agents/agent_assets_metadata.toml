@@ -1,0 +1,62 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "h_mRCiFD5G6e4dc-pfLOG"
+uri = "file://artifacts/laura-lopez/public/images/laura-portrait.png"
+type = "image"
+title = "Professional portrait of elegant woman"
+
+[[generated]]
+id = "-zwhv5AxO-__9dGFR9axa"
+uri = "file://artifacts/laura-lopez/public/images/top-pick-1.png"
+type = "image"
+title = "Beverly Hills luxury estate"
+
+[[generated]]
+id = "bdCezxIJrsXoZDdTZOPR4"
+uri = "file://artifacts/laura-lopez/public/images/top-pick-2.png"
+type = "image"
+title = "Trousdale modernist home"
+
+[[generated]]
+id = "pPBXEzcIViLnf8sVz_Vn9"
+uri = "file://artifacts/laura-lopez/public/images/top-pick-3.png"
+type = "image"
+title = "Holmby Hills traditional estate"
+
+[[generated]]
+id = "reowd4K5MpTxanWsqWS1N"
+uri = "file://artifacts/laura-lopez/public/images/listing-1.png"
+type = "image"
+title = "Luxury listing thumbnail 1"
+
+[[generated]]
+id = "R12UIz08eyt6dpJgU41GA"
+uri = "file://artifacts/laura-lopez/public/images/listing-2.png"
+type = "image"
+title = "Luxury listing thumbnail 2"
+
+[[generated]]
+id = "ZzVG3YYM-CaV34w7S_Hz6"
+uri = "file://artifacts/laura-lopez/public/images/listing-3.png"
+type = "image"
+title = "Luxury listing thumbnail 3"
+
+[[generated]]
+id = "199IO3XThOQuhDuhnG8PV"
+uri = "file://artifacts/laura-lopez/public/images/top-pick-4.png"
+type = "image"
+title = "Contemporary luxury home"
+
+[[generated]]
+id = "c4fDfpDA-Tz75QhATT6gK"
+uri = "file://artifacts/laura-lopez/public/images/top-pick-5.png"
+type = "image"
+title = "Classic luxury villa"
+
+[[generated]]
+id = "ndJIkvSBEhXtSrkGcpkJE"
+uri = "file://artifacts/laura-lopez/public/images/top-pick-6.png"
+type = "image"
+title = "Modern architectural compound"

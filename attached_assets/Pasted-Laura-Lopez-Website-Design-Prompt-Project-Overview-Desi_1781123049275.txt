@@ -1,0 +1,232 @@
+Laura Lopez Website Design Prompt
+
+Project Overview
+
+Design a luxury advisory website for Laura Lopez, Director of Beverly Hills Estates.
+
+The website should feel like a hybrid of:
+
+Beverly Hills Estates
+A private wealth advisory firm
+A family office
+An architectural journal
+
+The site should inherit the sophistication and credibility of Beverly Hills Estates while establishing Laura’s distinct identity as an advisor to multi-generational and high-net-worth families.
+
+This is NOT a traditional luxury real estate website.
+
+The objective is to communicate:
+
+Intelligence.
+Discretion.
+Legacy.
+Market expertise.
+Strategic thinking.
+
+Visual Direction
+
+Use Beverly Hills Estates brand colors:
+
+Emerald
+#153e35
+
+Gold
+#8d7631
+
+Supporting Colors:
+
+Ivory
+#F8F6F2
+
+Warm White
+#F3F1EC
+
+Charcoal
+#232323
+
+Style:
+
+Large architectural photography
+Refined serif typography
+Generous white space
+Editorial layouts
+Minimal animation
+Timeless design
+Modern luxury
+
+The site should feel more like a private wealth firm than a brokerage.
+
+Homepage Structure
+
+Hero Section
+
+Laura Lopez
+
+Director, Beverly Hills Estates
+
+Advisor to Multi-Generational & High-Net-Worth Families
+
+Supporting statement:
+
+Strategic real estate advisory for families, advisors, and investors throughout Beverly Hills and Los Angeles.
+
+Primary CTA:
+Private Consultation
+
+Secondary CTA:
+Market Intelligence
+
+Section 2
+
+Real Estate as Long-Term Strategy
+
+Introduce Laura’s advisory approach.
+
+Focus on:
+
+Asset positioning
+Generational wealth
+Portfolio perspective
+Market intelligence
+Discretion
+
+Section 3
+
+Laura’s Market Intelligence
+
+Display latest intelligence articles.
+
+Examples:
+
+Beverly Park Overview
+Trousdale Estate Guide
+Prop 19 Updates
+Insurance & Fire Hardening Strategies
+FIRPTA Considerations
+Palisades Rebuild Activity
+
+Section 4
+
+Laura’s Top Picks
+
+Featured properties selected personally by Laura.
+
+Not necessarily her listings.
+
+Purpose:
+
+Demonstrate taste.
+Demonstrate market awareness.
+Create engagement.
+
+Each property includes:
+
+Why Laura selected it
+Architecture notes
+Lot characteristics
+Long-term value commentary
+
+This should become a signature feature of the brand.
+
+Section 5
+
+Current Listings
+
+Automatically synced from Beverly Hills Estates.
+
+Section 6
+
+Recent Sales
+
+Automatically synced from Beverly Hills Estates.
+
+Section 7
+
+Private Consultation
+
+Inquiry form.
+
+About Page
+
+Professional biography.
+
+Highlight:
+
+USC summa cum laude
+Director of Beverly Hills Estates
+Advisory approach
+Experience with high-net-worth families
+
+Keep concise and sophisticated.
+
+Market Intelligence Section
+
+Create content categories:
+
+Neighborhood Intelligence
+
+Beverly Park
+Trousdale
+Holmby Hills
+Beverly Hills Flats
+Bel Air
+
+Regulatory Intelligence
+
+Prop 19
+FIRPTA
+FinCEN
+AB38
+
+Architecture
+
+Paul Williams
+Wallace Neff
+Neutra
+Buff & Hensman
+
+Insurance & Risk
+
+Fire hardening
+Brush clearance
+Insurance optimization
+
+Market Activity
+
+Sales reports
+Development trends
+Off-market activity
+
+Interactive Features
+
+Laura’s Top Picks
+
+Save Favorite Properties
+
+Private Market Brief Signup
+
+Request Neighborhood Report
+
+Request Consultation
+
+Future CRM Integration
+
+Structure site so future capabilities can include:
+
+Saved property collections
+Client portals
+Market alerts
+Private intelligence reports
+Automated newsletter distribution
+CRM integration
+Social media automation
+
+Overall Impression
+
+The website should communicate:
+
+Laura Lopez is not simply selling homes.
+
+She is advising families on long-term real estate decisions.
+
+The site should feel intelligent, timeless, trusted, and quietly influential.
