@@ -21,7 +21,7 @@ export default function Navbar() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-primary shadow-md border-b border-primary/20">
       <div className="container mx-auto px-6 h-20 md:h-24 flex items-center justify-between">
         <Link href="/" className="flex items-center" data-testid="link-home-logo" onClick={handleNav}>
-          <img src={tbheLogo} alt="The Beverly Hills Estates" className="h-12 md:h-16 w-auto" />
+          <img src={tbheLogo} alt="The Beverly Hills Estates" className="h-9 md:h-16 w-auto" />
         </Link>
 
         {/* Desktop nav */}
