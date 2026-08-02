@@ -15,7 +15,7 @@ export default function About() {
           
           <div className="flex flex-col lg:flex-row gap-16 lg:gap-24 mb-32">
             <div className="w-full lg:w-1/2 order-2 lg:order-1">
-              <h1 className="font-serif text-5xl md:text-6xl text-primary mb-8">Laura Lopez</h1>
+              <h1 className="font-serif text-[clamp(2.25rem,6vw,3.75rem)] text-primary mb-8">Laura Lopez</h1>
               <h2 className="font-sans uppercase tracking-widest text-sm text-secondary mb-12 pb-6 border-b border-border">Director, Beverly Hills Estates</h2>
               
               <div className="font-serif text-lg leading-relaxed text-foreground/80 space-y-6">
@@ -59,7 +59,7 @@ export default function About() {
 
           <div className="bg-card p-12 md:p-20 text-center space-y-8">
             <h3 className="font-sans uppercase tracking-widest text-sm text-primary/60">Advisory Philosophy</h3>
-            <p className="font-serif text-2xl md:text-3xl leading-relaxed text-foreground max-w-3xl mx-auto italic">
+            <p className="font-serif text-[clamp(1.35rem,3vw,1.875rem)] leading-relaxed text-foreground max-w-3xl mx-auto italic">
               "The most significant real estate decisions are measured not in market cycles, but in generations. I advise my clients to view prime Los Angeles real estate as a unique asset class that, when properly acquired and positioned, provides unparalleled wealth preservation."
             </p>
             <div className="pt-8">

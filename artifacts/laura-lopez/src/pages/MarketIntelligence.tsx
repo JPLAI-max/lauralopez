@@ -56,7 +56,7 @@ export default function MarketIntelligence() {
         <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="max-w-6xl mx-auto">
           
           <motion.div variants={fadeUpVariant} className="mb-24 text-center max-w-3xl mx-auto">
-            <h1 className="font-serif text-5xl md:text-6xl text-primary mb-6">Market Intelligence</h1>
+            <h1 className="font-serif text-[clamp(2.25rem,6vw,3.75rem)] text-primary mb-6">Market Intelligence</h1>
             <p className="font-serif text-xl text-foreground/80 leading-relaxed">
               Proprietary research, neighborhood analysis, and regulatory guidance designed for family offices and institutional-grade investors navigating the Los Angeles luxury sector.
             </p>

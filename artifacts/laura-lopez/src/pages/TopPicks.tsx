@@ -75,7 +75,7 @@ export default function TopPicks() {
         <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="max-w-7xl mx-auto">
           
           <motion.div variants={fadeUpVariant} className="mb-20 text-center max-w-4xl mx-auto">
-            <h1 className="font-serif text-5xl md:text-6xl text-primary mb-6">Laura's Top Picks</h1>
+            <h1 className="font-serif text-[clamp(2.25rem,6vw,3.75rem)] text-primary mb-6">Laura's Top Picks</h1>
             <p className="font-serif text-xl text-foreground/80 leading-relaxed">
               Properties personally curated by Laura Lopez — not necessarily her listings, but properties she believes represent exceptional strategic value in the current market.
             </p>

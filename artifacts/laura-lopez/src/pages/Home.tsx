@@ -67,7 +67,7 @@ export default function Home() {
             <h2 className="font-sans uppercase tracking-widest text-sm text-primary/60">Advisory Philosophy</h2>
             <h3 className="font-serif text-[clamp(1.75rem,4vw,3rem)] text-foreground">Real Estate as Long-Term Strategy</h3>
             <div className="w-12 h-px bg-border mx-auto"></div>
-            <div className="font-serif text-lg md:text-xl leading-relaxed text-foreground/80 space-y-6 text-left">
+            <div className="font-serif text-[clamp(1.05rem,2vw,1.25rem)] leading-relaxed text-foreground/80 space-y-6 text-left">
               <p>
                 True wealth preservation requires more than transactional expertise. It demands a holistic understanding of how real estate functions within a broader generational portfolio. My practice is built on the premise that legacy assets should be positioned with the same rigor as any other institutional holding.
               </p>
@@ -106,7 +106,7 @@ export default function Home() {
               <motion.div key={i} variants={fadeUpVariant} className="group cursor-pointer">
                 <div className="bg-background p-6 md:p-8 border border-border h-full flex flex-col transition-shadow hover:shadow-lg">
                   <span className="font-sans text-xs uppercase tracking-widest text-secondary mb-6 block">{article.category}</span>
-                  <h4 className="font-serif text-xl md:text-2xl mb-4 group-hover:text-primary transition-colors">{article.title}</h4>
+                  <h4 className="font-serif text-[clamp(1.15rem,2.5vw,1.5rem)] mb-4 group-hover:text-primary transition-colors">{article.title}</h4>
                   <p className="text-muted-foreground font-serif leading-relaxed mb-8 flex-1">{article.desc}</p>
                   <span className="font-sans text-xs uppercase tracking-widest text-primary flex items-center gap-2">
                     Read Intelligence <span className="text-secondary opacity-0 group-hover:opacity-100 transition-opacity">→</span>
@@ -164,7 +164,7 @@ export default function Home() {
                 </div>
                 <div className="w-full lg:w-2/5 space-y-5">
                   <span className="font-sans text-xs uppercase tracking-widest text-secondary">{pick.arch}</span>
-                  <h4 className="font-serif text-2xl md:text-3xl">{pick.area}</h4>
+                  <h4 className="font-serif text-[clamp(1.35rem,3vw,1.875rem)]">{pick.area}</h4>
                   <div className="w-8 h-px bg-border"></div>
                   <p className="font-serif text-lg leading-relaxed text-foreground/80 italic">"{pick.commentary}"</p>
                   <div className="pt-4 flex justify-between items-center border-t border-border">
@@ -219,7 +219,7 @@ export default function Home() {
         <div className="container mx-auto px-6 max-w-4xl">
           <motion.div initial="hidden" whileInView="visible" viewport={viewportOpts} variants={fadeUpVariant} className="text-center mb-12 md:mb-16">
             <h2 className="font-serif text-[clamp(1.75rem,4vw,3rem)] mb-6 text-white">Begin a Confidential Conversation</h2>
-            <p className="font-serif text-lg md:text-xl opacity-80 max-w-2xl mx-auto">
+            <p className="font-serif text-[clamp(1.05rem,2vw,1.25rem)] opacity-80 max-w-2xl mx-auto">
               Whether you are evaluating a generational holding, considering an off-market acquisition, or requiring a strategic portfolio review, discretion is assured.
             </p>
           </motion.div>

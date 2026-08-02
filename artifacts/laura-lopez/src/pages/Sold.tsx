@@ -111,7 +111,7 @@ export default function Sold() {
             <p className="font-sans text-xs tracking-widest uppercase text-primary/60 mb-4">
               Transaction History
             </p>
-            <h1 className="font-serif text-5xl md:text-6xl text-foreground mb-6">
+            <h1 className="font-serif text-[clamp(2.25rem,6vw,3.75rem)] text-foreground mb-6">
               Recent Sales
             </h1>
             <p className="font-serif text-xl text-muted-foreground leading-relaxed">
