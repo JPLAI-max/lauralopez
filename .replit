@@ -30,3 +30,8 @@ externalPort = 8081
 [[ports]]
 localPort = 19969
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+INQUIRY_IP_SALT = "1daf12b169d8f1c175e8a2db903f82dcc7b3bf8628893b0ddb7d886788009d0c"
