@@ -1,0 +1,159 @@
+BRICK 1 — REAL INQUIRY CAPTURE
+
+Context: The contact form currently validates input and discards it, 
+showing a fake success toast. Fix that end to end. Do not touch any 
+other page, component, or styling. Do not modify pnpm-workspace.yaml.
+
+────────────────────────────────────────
+1. DB SCHEMA — lib/db/src/schema/inquiries.ts (new file)
+────────────────────────────────────────
+Create a Drizzle pgTable `inquiries`:
+
+  id            uuid primary key, defaultRandom
+  fullName      text not null
+  email         text not null
+  phone         text nullable
+  affiliation   text not null
+  inquiryType   text not null
+  message       text not null
+  status        text not null, default 'new'   // new | read | archived
+  source        text not null, default 'website'
+  userAgent     text nullable
+  ipHash        text nullable                  // sha256(ip + INQUIRY_IP_SALT)
+  createdAt     timestamp with timezone, notNull, defaultNow
+  readAt        timestamp with timezone, nullable
+
+Index on createdAt (desc) and on status.
+
+Export insertInquirySchema via createInsertSchema, omitting id, status,
+source, ipHash, userAgent, createdAt, readAt. Export types Inquiry and
+InsertInquiry.
+
+Add `export * from "./inquiries";` to lib/db/src/schema/index.ts.
+
+NEVER store the raw IP address. Hash only.
+
+────────────────────────────────────────
+2. API CONTRACT — lib/api-spec/openapi.yaml
+────────────────────────────────────────
+Add tag `inquiries`. Add path:
+
+POST /inquiries
+  operationId: createInquiry
+  requestBody: CreateInquiryRequest
+  responses:
+    201 -> CreateInquiryResponse { id: string, status: string }
+    400 -> ErrorResponse { error: string, fields?: object }
+    429 -> ErrorResponse
+    500 -> ErrorResponse
+
+CreateInquiryRequest schema:
+  fullName    string, minLength 2, maxLength 120       required
+  email       string, format email, maxLength 254      required
+  phone       string, maxLength 40                     optional
+  affiliation string, maxLength 60                     required
+  inquiryType string, maxLength 60                     required
+  message     string, minLength 10, maxLength 4000     required
+  website     string                                   optional (honeypot)
+
+Then run: pnpm --filter @workspace/api-spec run codegen
+
+────────────────────────────────────────
+3. ROUTE — artifacts/api-server/src/routes/inquiries.ts (new file)
+────────────────────────────────────────
+POST /inquiries handler:
+
+  a. Validate body with the generated Zod schema. On failure return 400
+     with per-field errors. Do NOT swallow validation errors.
+
+  b. HONEYPOT: if `website` is a non-empty string, return 201 with a
+     fabricated id and write NOTHING to the DB. Silent discard — the
+     bot must not learn it was caught.
+
+  c. RATE LIMIT: max 5 submissions per IP per hour. On exceed, return
+     429. Use an in-memory Map with timestamp pruning.
+     Add a code comment: in-memory limiter does not survive autoscale
+     multi-instance; move to a DB-backed counter before real traffic.
+
+  d. Whitelist `affiliation` and `inquiryType` against the exact enum
+     values in ContactForm.tsx. Reject anything else with 400.
+
+  e. Insert into DB. If the insert throws, log via pino and return 500.
+     THE HANDLER MUST NOT RETURN A SUCCESS RESPONSE ON A FAILED WRITE.
+
+  f. AFTER a successful insert, attempt the Resend notification inside
+     its own try/catch. If email fails, log the error and STILL return
+     201. Email failure must never lose a lead.
+
+  g. Return 201 { id, status: "received" }.
+
+Register in artifacts/api-server/src/routes/index.ts.
+
+────────────────────────────────────────
+4. EMAIL — artifacts/api-server/src/lib/mailer.ts (new file)
+────────────────────────────────────────
+Add dependency `resend` to artifacts/api-server/package.json.
+
+Env vars (all optional at this stage):
+  RESEND_API_KEY
+  INQUIRY_NOTIFY_EMAIL
+  INQUIRY_FROM_EMAIL
+  INQUIRY_IP_SALT
+
+If RESEND_API_KEY or INQUIRY_NOTIFY_EMAIL is missing, log at info level
+("email notification skipped — not configured") and return without
+throwing. The domain is not provisioned yet; the app must run cleanly
+without it.
+
+Notification email: plain, readable, includes every field plus the
+inquiry id and timestamp. Subject: "New Inquiry — {inquiryType} — {fullName}".
+Set replyTo to the submitter's email.
+
+────────────────────────────────────────
+5. FRONTEND — components/ContactForm.tsx
+────────────────────────────────────────
+Replace the fake onSubmit with the generated react-query mutation hook
+from @workspace/api-client-react.
+
+  - Add a honeypot field named `website`: a real input, positioned
+    off-screen via CSS (NOT display:none — some bots skip those),
+    tabIndex={-1}, autoComplete="off", aria-hidden="true".
+  - Disable the submit button and show a pending label while in flight.
+  - SUCCESS toast only on a 201.
+  - On 429: "Too many submissions. Please try again later."
+  - On any other error: an error-variant toast reading "Something went
+    wrong. Please email us directly." — and DO NOT reset the form, so
+    the user does not lose what they typed.
+  - Only reset the form on confirmed success.
+
+Change nothing about the existing styling, class names, or field layout.
+
+────────────────────────────────────────
+6. MIGRATE
+────────────────────────────────────────
+pnpm --filter @workspace/db run push    (dev only)
+
+Do not run anything against production. Dev DB and prod DB are separate;
+prod gets its own push at deploy time.
+
+────────────────────────────────────────
+7. UPDATE replit.md
+────────────────────────────────────────
+Fill in the project name and one-line description (Laura Lopez advisory
+site). Populate "Where things live" with pointers to the schema file,
+openapi.yaml, and the route directory. Add to "Gotchas": always run
+api-spec codegen after editing openapi.yaml.
+
+────────────────────────────────────────
+ACCEPTANCE — verify each before reporting done
+────────────────────────────────────────
+1. pnpm run typecheck passes clean.
+2. Valid submission -> 201, row present in DB, success toast.
+3. Invalid email -> 400, field-level error shown, no DB row.
+4. Honeypot filled -> 201 returned, NO DB row.
+5. 6th submission in an hour -> 429, error toast, form NOT reset.
+6. API server stopped -> error toast, form NOT reset, no false success.
+7. RESEND_API_KEY unset -> submission still succeeds and persists.
+
+Report what you built, any deviation from this spec and why, and paste
+the results of all 7 acceptance checks.

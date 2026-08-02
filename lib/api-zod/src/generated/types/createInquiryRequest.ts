@@ -5,9 +5,6 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-export interface HealthStatus {
-  status: string;
-}
 
 export interface CreateInquiryRequest {
   /**
@@ -31,16 +28,3 @@ export interface CreateInquiryRequest {
   /** Honeypot field — must be empty */
   website?: string;
 }
-
-export interface CreateInquiryResponse {
-  id: string;
-  status: string;
-}
-
-export type ErrorResponseFields = { [key: string]: unknown };
-
-export interface ErrorResponse {
-  error: string;
-  fields?: ErrorResponseFields;
-}
-

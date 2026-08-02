@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useCreateInquiry } from "@workspace/api-client-react";
 
 const formSchema = z.object({
   fullName: z.string().min(2, "Name is required"),
@@ -15,11 +16,13 @@ const formSchema = z.object({
   affiliation: z.string().min(1, "Please select an affiliation"),
   inquiryType: z.string().min(1, "Please select an inquiry type"),
   message: z.string().min(10, "Please provide some details"),
+  website: z.string().optional(), // honeypot
 });
 
 export default function ContactForm() {
   const { toast } = useToast();
-  
+  const { mutate: submitInquiry, isPending } = useCreateInquiry();
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -29,19 +32,54 @@ export default function ContactForm() {
       affiliation: "",
       inquiryType: "",
       message: "",
+      website: "",
     },
   });
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    toast({
-      title: "Inquiry Submitted",
-      description: "Thank you. We will be in touch shortly.",
-    });
-    form.reset();
+    submitInquiry(
+      { data: values },
+      {
+        onSuccess: () => {
+          toast({
+            title: "Inquiry Submitted",
+            description: "Thank you. We will be in touch shortly.",
+          });
+          form.reset();
+        },
+        onError: (error: unknown) => {
+          const status = (error as { status?: number })?.status;
+          if (status === 429) {
+            toast({
+              variant: "destructive",
+              title: "Too many submissions",
+              description: "Too many submissions. Please try again later.",
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Submission failed",
+              description: "Something went wrong. Please email us directly.",
+            });
+          }
+          // Do NOT reset form — preserve what the user typed
+        },
+      },
+    );
   }
 
   return (
     <Form {...form}>
+      {/* Honeypot — positioned off-screen, hidden from real users */}
+      <input
+        type="text"
+        tabIndex={-1}
+        autoComplete="off"
+        aria-hidden="true"
+        style={{ position: "absolute", left: "-9999px", top: "-9999px", width: "1px", height: "1px", overflow: "hidden" }}
+        {...form.register("website")}
+      />
+
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
@@ -154,8 +192,12 @@ export default function ContactForm() {
           )}
         />
 
-        <Button type="submit" className="w-full sm:w-auto px-10 py-6 uppercase tracking-wider text-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded-none">
-          Submit Inquiry
+        <Button
+          type="submit"
+          disabled={isPending}
+          className="w-full sm:w-auto px-10 py-6 uppercase tracking-wider text-sm bg-primary hover:bg-primary/90 text-primary-foreground rounded-none"
+        >
+          {isPending ? "Submitting…" : "Submit Inquiry"}
         </Button>
       </form>
     </Form>
