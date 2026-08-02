@@ -8,7 +8,7 @@ const fadeUpVariant: Variants = {
 
 export default function Contact() {
   return (
-    <div className="w-full pt-32 pb-24 min-h-screen bg-card">
+    <div className="w-full  pb-24 min-h-screen bg-card">
       <div className="container mx-auto px-6">
         <motion.div initial="hidden" animate="visible" variants={fadeUpVariant} className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-16 lg:gap-24">
           

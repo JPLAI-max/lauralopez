@@ -99,7 +99,7 @@ export default function Sold() {
   const hasSolds = placeholderSolds.length > 0;
 
   return (
-    <div className="min-h-screen bg-background pt-24">
+    <div className="min-h-screen bg-background ">
       <section className="py-20 border-b border-border">
         <div className="container mx-auto px-6">
           <motion.div

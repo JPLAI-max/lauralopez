@@ -18,26 +18,30 @@ const viewportOpts = { once: true, margin: "0px" };
 export default function Home() {
   return (
     <div className="w-full overflow-x-hidden">
-      {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      {/* Hero Section — full-bleed behind navbar via -mt-[var(--header-h)] */}
+      <section className="relative min-h-[100svh] flex items-center justify-center overflow-hidden -mt-[var(--header-h)]">
         <div className="absolute inset-0 z-0">
           <img src={tbheOg} alt="Luxury Estate" className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-primary/70 mix-blend-multiply"></div>
         </div>
 
-        <div className="relative z-10 container mx-auto px-6 text-center text-white py-32">
+        {/* paddingTop = --header-h + base vertical padding so text clears the navbar */}
+        <div
+          className="relative z-10 container mx-auto px-6 text-center text-white pb-24 md:pb-32"
+          style={{ paddingTop: "calc(var(--header-h) + 6rem)" }}
+        >
           <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="max-w-4xl mx-auto space-y-6">
-            <motion.h1 variants={fadeUpVariant} className="font-serif text-5xl md:text-7xl lg:text-8xl tracking-tight">
+            <motion.h1 variants={fadeUpVariant} className="font-serif text-[clamp(2.75rem,7vw,6rem)] tracking-tight">
               Laura Lopez
             </motion.h1>
             <motion.div variants={fadeUpVariant} className="w-24 h-px bg-secondary mx-auto"></motion.div>
-            <motion.h2 variants={fadeUpVariant} className="font-sans text-lg md:text-2xl uppercase tracking-widest font-light text-white/90">
+            <motion.h2 variants={fadeUpVariant} className="font-sans text-[clamp(0.95rem,2vw,1.5rem)] uppercase tracking-widest font-light text-white/90">
               Director, Beverly Hills Estates
             </motion.h2>
-            <motion.h3 variants={fadeUpVariant} className="font-sans text-xs md:text-base tracking-wider uppercase opacity-80 pt-2">
+            <motion.h3 variants={fadeUpVariant} className="font-sans text-[clamp(0.7rem,1.3vw,1rem)] tracking-wider uppercase opacity-80 pt-2">
               Advisor to Multi-Generational & High-Net-Worth Families
             </motion.h3>
-            <motion.p variants={fadeUpVariant} className="font-serif text-lg md:text-2xl pt-6 pb-10 opacity-90 max-w-2xl mx-auto italic">
+            <motion.p variants={fadeUpVariant} className="font-serif text-[clamp(1.05rem,2vw,1.5rem)] pt-6 pb-10 opacity-90 max-w-2xl mx-auto italic">
               "Strategic real estate advisory for families, advisors, and investors throughout Beverly Hills and Los Angeles."
             </motion.p>
             <motion.div variants={fadeUpVariant} className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -61,7 +65,7 @@ export default function Home() {
             className="max-w-3xl mx-auto text-center space-y-8"
           >
             <h2 className="font-sans uppercase tracking-widest text-sm text-primary/60">Advisory Philosophy</h2>
-            <h3 className="font-serif text-3xl md:text-5xl text-foreground">Real Estate as Long-Term Strategy</h3>
+            <h3 className="font-serif text-[clamp(1.75rem,4vw,3rem)] text-foreground">Real Estate as Long-Term Strategy</h3>
             <div className="w-12 h-px bg-border mx-auto"></div>
             <div className="font-serif text-lg md:text-xl leading-relaxed text-foreground/80 space-y-6 text-left">
               <p>
@@ -86,7 +90,7 @@ export default function Home() {
           <motion.div initial="hidden" whileInView="visible" viewport={viewportOpts} variants={fadeUpVariant} className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 gap-6">
             <div className="max-w-2xl">
               <h2 className="font-sans uppercase tracking-widest text-sm text-primary/60 mb-4">Market Intelligence</h2>
-              <h3 className="font-serif text-3xl md:text-4xl text-foreground">Proprietary Research & Insights</h3>
+              <h3 className="font-serif text-[clamp(1.75rem,3.5vw,2.25rem)] text-foreground">Proprietary Research & Insights</h3>
             </div>
             <Link href="/market-intelligence" className="uppercase tracking-wider text-xs px-6 py-3 border border-border hover:bg-white transition-colors shrink-0">
               View All Reports
@@ -119,7 +123,7 @@ export default function Home() {
         <div className="container mx-auto px-6">
           <motion.div initial="hidden" whileInView="visible" viewport={viewportOpts} variants={fadeUpVariant} className="mb-12 md:mb-16">
             <h2 className="font-sans uppercase tracking-widest text-sm text-primary/60 mb-4 text-center">Curated Selection</h2>
-            <h3 className="font-serif text-3xl md:text-4xl text-foreground text-center">Laura's Top Picks</h3>
+            <h3 className="font-serif text-[clamp(1.75rem,3.5vw,2.25rem)] text-foreground text-center">Laura's Top Picks</h3>
             <div className="w-12 h-px bg-border mx-auto mt-8"></div>
           </motion.div>
 
@@ -214,7 +218,7 @@ export default function Home() {
       <section className="py-20 md:py-32 bg-primary text-primary-foreground">
         <div className="container mx-auto px-6 max-w-4xl">
           <motion.div initial="hidden" whileInView="visible" viewport={viewportOpts} variants={fadeUpVariant} className="text-center mb-12 md:mb-16">
-            <h2 className="font-serif text-3xl md:text-5xl mb-6 text-white">Begin a Confidential Conversation</h2>
+            <h2 className="font-serif text-[clamp(1.75rem,4vw,3rem)] mb-6 text-white">Begin a Confidential Conversation</h2>
             <p className="font-serif text-lg md:text-xl opacity-80 max-w-2xl mx-auto">
               Whether you are evaluating a generational holding, considering an off-market acquisition, or requiring a strategic portfolio review, discretion is assured.
             </p>

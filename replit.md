@@ -58,6 +58,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 ## Gotchas
 
 - **Always run codegen after editing `openapi.yaml`**: `pnpm --filter @workspace/api-spec run codegen`
+- **Navbar height and `--header-h` must stay in sync**: The CSS variable `--header-h` in `index.css` (5rem mobile / 6rem md+) drives the layout offset and the hero negative margin. If `Navbar.tsx` `h-20 md:h-24` ever changes, update `--header-h` values to match or pages will have a gap or hidden-under-navbar content.
 - `resend` is an optional runtime dependency. If `RESEND_API_KEY` or `INQUIRY_NOTIFY_EMAIL` is unset, the server logs a skip and continues — no crash.
 - The in-memory rate limiter resets on server restart. This is intentional for dev; upgrade before production scale.
 - DB push is dev-only (`pnpm --filter @workspace/db run push`). Production DB gets its own push at deploy time.

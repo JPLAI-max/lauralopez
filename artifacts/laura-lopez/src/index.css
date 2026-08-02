@@ -52,6 +52,8 @@
 
 /* LIGHT MODE */
 :root {
+  --header-h: 5rem; /* 80px — matches h-20 navbar; update if navbar height changes */
+
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
 
@@ -99,6 +101,12 @@
   --app-font-serif: 'Playfair Display', serif;
   --app-font-mono: Menlo, monospace;
   --radius: 0px; 
+}
+
+@media (min-width: 768px) {
+  :root {
+    --header-h: 6rem; /* 96px — matches md:h-24 navbar */
+  }
 }
 
 .dark {

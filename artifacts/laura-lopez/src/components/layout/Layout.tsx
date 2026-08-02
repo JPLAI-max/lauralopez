@@ -13,7 +13,10 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col font-sans">
       <Navbar />
-      <main className="flex-1">{children}</main>
+      {/* paddingTop offsets the fixed navbar — driven by --header-h in index.css */}
+      <main className="flex-1" style={{ paddingTop: "var(--header-h)" }}>
+        {children}
+      </main>
       <Footer />
     </div>
   );

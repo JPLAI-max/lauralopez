@@ -1,0 +1,81 @@
+BRICK 1.5 — RESPONSIVE STRUCTURAL FIX
+
+The fixed navbar has no corresponding offset in Layout, so every 
+page hardcodes its own top padding and none of them are correct 
+at more than one viewport width. Fix at the layout level, then 
+remove the per-page workarounds.
+
+1. HEADER OFFSET — single source of truth
+   In index.css :root, define:
+     --header-h: 5rem;        /* 80px, matches h-20 */
+   and at the md breakpoint (min-width: 768px):
+     --header-h: 6rem;        /* 96px, matches h-24 */
+
+   In Layout.tsx, give <main> style={{ paddingTop: "var(--header-h)" }}.
+
+   Then REMOVE the compensating top padding from every page:
+     - About.tsx        pt-32  -> remove (keep pb-24)
+     - MarketIntelligence.tsx  pt-32 -> remove
+     - TopPicks.tsx     pt-32  -> remove
+     - Contact.tsx      pt-32  -> remove
+     - Listings.tsx     pt-24  -> remove
+     - Sold.tsx         pt-24  -> remove
+
+   Navbar keeps h-20 md:h-24. If that ever changes, --header-h 
+   must change with it. Note this in replit.md Gotchas.
+
+2. HERO — Home.tsx line 22
+   The hero sits UNDER the fixed header by design (full-bleed 
+   image). So it must cancel the main padding and use dynamic 
+   viewport units:
+     - Replace min-h-screen with min-h-[100svh]
+     - Add a negative top margin of var(--header-h) so the image 
+       runs behind the navbar, and add matching top padding to 
+       the inner content div so text stays clear of it.
+     - Change inner py-32 to py-24 md:py-32.
+   Verify on a 667px-tall viewport (iPhone SE) that no hero text 
+   is clipped and both CTA buttons are reachable.
+
+3. VIEWPORT META — index.html line 5
+   Change to:
+     <meta name="viewport" content="width=device-width, initial-scale=1" />
+   Remove maximum-scale=1 entirely. It blocks pinch zoom and 
+   fails WCAG 1.4.4.
+
+4. FLUID TYPE — replace breakpoint jumps with clamp()
+   Home.tsx hero:
+     h1  text-5xl md:text-7xl lg:text-8xl -> text-[clamp(2.75rem,7vw,6rem)]
+     h2  text-lg md:text-2xl              -> text-[clamp(0.95rem,2vw,1.5rem)]
+     h3  text-xs md:text-base             -> text-[clamp(0.7rem,1.3vw,1rem)]
+     p   text-lg md:text-2xl              -> text-[clamp(1.05rem,2vw,1.5rem)]
+   Navbar logo:
+     h-9 md:h-16 -> h-[clamp(2.25rem,4vw,4rem)]
+   Section headings across all pages:
+     text-3xl md:text-5xl -> text-[clamp(1.75rem,4vw,3rem)]
+     text-3xl md:text-4xl -> text-[clamp(1.75rem,3.5vw,2.25rem)]
+
+   Do not change font families, colors, tracking, or spacing.
+
+5. MOBILE DRAWER — Navbar.tsx
+   When mobileOpen is true, lock body scroll (set 
+   document.body.style.overflow = "hidden" in a useEffect, 
+   restore on close and on unmount). Add max-h and overflow-y-auto 
+   to the drawer so it scrolls if it exceeds the viewport.
+   Close the drawer automatically when the viewport crosses to 
+   >=768px, or the state gets stuck when rotating a tablet.
+
+6. META DESCRIPTION — index.html
+   Replace all three "built on Replit. Update this description to 
+   reflect the app." strings with:
+   "Strategic real estate advisory for families, advisors, and 
+   investors throughout Beverly Hills and Los Angeles."
+
+ACCEPTANCE — test at these widths and report each:
+  320, 375, 390, 414, 768, 820, 1024, 1280, 1440, 1920
+
+For each: (a) no content hidden under the navbar, (b) no 
+horizontal scrollbar, (c) hero text not clipped, (d) no dead gap 
+between navbar and first content block.
+
+Also test 375x667 in landscape (667x375) — short viewports are 
+where min-h-screen heroes break.

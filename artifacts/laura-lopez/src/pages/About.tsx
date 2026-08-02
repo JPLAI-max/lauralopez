@@ -9,7 +9,7 @@ const fadeUpVariant: Variants = {
 
 export default function About() {
   return (
-    <div className="w-full pt-32 pb-24">
+    <div className="w-full  pb-24">
       <div className="container mx-auto px-6">
         <motion.div initial="hidden" animate="visible" variants={fadeUpVariant} className="max-w-5xl mx-auto">
           

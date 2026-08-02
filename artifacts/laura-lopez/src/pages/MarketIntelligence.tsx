@@ -51,7 +51,7 @@ const categories = [
 
 export default function MarketIntelligence() {
   return (
-    <div className="w-full pt-32 pb-24 bg-background">
+    <div className="w-full  pb-24 bg-background">
       <div className="container mx-auto px-6">
         <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="max-w-6xl mx-auto">
           

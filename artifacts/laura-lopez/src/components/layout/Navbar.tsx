@@ -1,11 +1,29 @@
 import { Link, useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import tbheLogo from "@assets/tbhe-logo.png";
 import { Menu, X } from "lucide-react";
 
 export default function Navbar() {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Lock body scroll when mobile drawer is open; restore on close and unmount
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
+
+  // Close drawer automatically when viewport crosses to >= 768px (e.g. tablet rotation)
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const handler = (e: MediaQueryListEvent) => {
+      if (e.matches) setMobileOpen(false);
+    };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   const navLinks = [
     { href: "/about", label: "About" },
@@ -21,7 +39,8 @@ export default function Navbar() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-primary shadow-md border-b border-primary/20">
       <div className="container mx-auto px-6 h-20 md:h-24 flex items-center justify-between">
         <Link href="/" className="flex items-center" data-testid="link-home-logo" onClick={handleNav}>
-          <img src={tbheLogo} alt="The Beverly Hills Estates" className="h-9 md:h-16 w-auto" />
+          {/* Logo height is fluid — if navbar h-20/md:h-24 changes, update --header-h in index.css too */}
+          <img src={tbheLogo} alt="The Beverly Hills Estates" className="h-[clamp(2.25rem,4vw,4rem)] w-auto" />
         </Link>
 
         {/* Desktop nav */}
@@ -62,9 +81,12 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer — max-h + overflow-y-auto so it scrolls on very short viewports */}
       {mobileOpen && (
-        <div className="md:hidden bg-primary border-t border-primary/20 px-6 pb-8 pt-4 flex flex-col gap-6">
+        <div
+          className="md:hidden bg-primary border-t border-primary/20 px-6 pb-8 pt-4 flex flex-col gap-6 overflow-y-auto"
+          style={{ maxHeight: "calc(100svh - var(--header-h))" }}
+        >
           {navLinks.map((link) => (
             <Link
               key={link.href}
