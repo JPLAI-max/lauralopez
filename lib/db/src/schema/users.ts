@@ -1,0 +1,66 @@
+import {
+  pgTable,
+  text,
+  uuid,
+  timestamp,
+  boolean,
+  index,
+} from "drizzle-orm/pg-core";
+
+// ---------------------------------------------------------------------------
+// users
+// ---------------------------------------------------------------------------
+export const usersTable = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(), // argon2id
+  name: text("name").notNull(),
+  role: text("role").notNull().default("admin"), // admin | staff
+  totpSecret: text("totp_secret"), // AES-256-GCM encrypted; null until enrolled
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+});
+
+export type User = typeof usersTable.$inferSelect;
+export type InsertUser = typeof usersTable.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// sessions
+// ---------------------------------------------------------------------------
+export const sessionsTable = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    userAgent: text("user_agent"),
+    ipHash: text("ip_hash"),
+  },
+  (table) => [
+    index("sessions_user_id_idx").on(table.userId),
+    index("sessions_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
+export type Session = typeof sessionsTable.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// auth_events — append-only audit log
+// ---------------------------------------------------------------------------
+export const authEventsTable = pgTable("auth_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id"), // nullable — may not exist for unknown email attempts
+  email: text("email").notNull(),
+  action: text("action").notNull(), // login | logout | totp_fail | password_fail | totp_enrolled | session_expired
+  success: boolean("success").notNull(),
+  ipHash: text("ip_hash"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AuthEvent = typeof authEventsTable.$inferSelect;

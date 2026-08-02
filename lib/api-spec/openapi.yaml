@@ -12,13 +12,16 @@ tags:
     description: Health operations
   - name: inquiries
     description: Inquiry operations
+  - name: auth
+    description: Authentication operations
+  - name: admin
+    description: Admin operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -62,6 +65,214 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /auth/login:
+    post:
+      operationId: authLogin
+      tags: [auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Password accepted — TOTP step required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/verify-totp:
+    post:
+      operationId: authVerifyTotp
+      tags: [auth]
+      summary: Verify TOTP code and issue session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpCodeRequest"
+      responses:
+        "200":
+          description: TOTP verified — session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "401":
+          description: Invalid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/logout:
+    post:
+      operationId: authLogout
+      tags: [auth]
+      summary: End the current session
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+  /auth/me:
+    get:
+      operationId: authMe
+      tags: [auth]
+      summary: Return current authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/totp/enroll:
+    post:
+      operationId: authTotpEnroll
+      tags: [auth]
+      summary: Begin TOTP enrollment — returns otpauth URI
+      responses:
+        "200":
+          description: Enrollment started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpEnrollResponse"
+        "401":
+          description: No pending session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/totp/confirm:
+    post:
+      operationId: authTotpConfirm
+      tags: [auth]
+      summary: Confirm TOTP enrollment with first code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpCodeRequest"
+      responses:
+        "200":
+          description: TOTP enrolled — session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "401":
+          description: Invalid code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/inquiries:
+    get:
+      operationId: adminListInquiries
+      tags: [admin]
+      summary: List inquiries (paginated)
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [new, read, archived]
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Inquiry list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminInquiriesResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/inquiries/{id}:
+    get:
+      operationId: adminGetInquiry
+      tags: [admin]
+      summary: Get a single inquiry (marks as read)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Inquiry detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminInquiryResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: adminPatchInquiry
+      tags: [admin]
+      summary: Update inquiry status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchInquiryRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminInquiryResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -69,8 +280,7 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
     CreateInquiryRequest:
       type: object
       properties:
@@ -98,12 +308,7 @@ components:
         website:
           type: string
           description: Honeypot field — must be empty
-      required:
-        - fullName
-        - email
-        - affiliation
-        - inquiryType
-        - message
+      required: [fullName, email, affiliation, inquiryType, message]
     CreateInquiryResponse:
       type: object
       properties:
@@ -111,9 +316,7 @@ components:
           type: string
         status:
           type: string
-      required:
-        - id
-        - status
+      required: [id, status]
     ErrorResponse:
       type: object
       properties:
@@ -122,5 +325,126 @@ components:
         fields:
           type: object
           additionalProperties: true
-      required:
-        - error
+      required: [error]
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+    LoginResponse:
+      type: object
+      properties:
+        requiresTotp:
+          type: boolean
+        requiresTotpSetup:
+          type: boolean
+      required: [requiresTotp, requiresTotpSetup]
+    TotpCodeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 6
+          maxLength: 8
+      required: [code]
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required: [ok]
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        totpEnabled:
+          type: boolean
+      required: [id, email, name, role, totpEnabled]
+    MeResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/AdminUser"
+      required: [user]
+    TotpEnrollResponse:
+      type: object
+      properties:
+        otpauthUrl:
+          type: string
+        secret:
+          type: string
+      required: [otpauthUrl, secret]
+    AdminInquiry:
+      type: object
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        affiliation:
+          type: string
+        inquiryType:
+          type: string
+        message:
+          type: string
+        status:
+          type: string
+        source:
+          type: string
+        createdAt:
+          type: string
+        readAt:
+          type: string
+          nullable: true
+      required: [id, fullName, email, affiliation, inquiryType, message, status, source, createdAt]
+    AdminInquiriesResponse:
+      type: object
+      properties:
+        inquiries:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminInquiry"
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+            totalPages:
+              type: integer
+          required: [page, pageSize, total, totalPages]
+        unreadCount:
+          type: integer
+      required: [inquiries, pagination, unreadCount]
+    AdminInquiryResponse:
+      type: object
+      properties:
+        inquiry:
+          $ref: "#/components/schemas/AdminInquiry"
+      required: [inquiry]
+    PatchInquiryRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [new, read, archived]
+      required: [status]

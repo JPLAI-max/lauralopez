@@ -9,7 +9,6 @@ import * as zod from 'zod';
 
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -44,6 +43,172 @@ export const CreateInquiryBody = zod.object({
   "inquiryType": zod.string().max(createInquiryBodyInquiryTypeMax),
   "message": zod.string().min(createInquiryBodyMessageMin).max(createInquiryBodyMessageMax),
   "website": zod.string().optional().describe('Honeypot field — must be empty')
+})
+
+
+/**
+ * @summary Login with email and password
+ */
+export const AuthLoginBody = zod.object({
+  "email": zod.string().email(),
+  "password": zod.string()
+})
+
+export const AuthLoginResponse = zod.object({
+  "requiresTotp": zod.boolean(),
+  "requiresTotpSetup": zod.boolean()
+})
+
+
+/**
+ * @summary Verify TOTP code and issue session
+ */
+export const authVerifyTotpBodyCodeMin = 6;
+export const authVerifyTotpBodyCodeMax = 8;
+
+
+
+export const AuthVerifyTotpBody = zod.object({
+  "code": zod.string().min(authVerifyTotpBodyCodeMin).max(authVerifyTotpBodyCodeMax)
+})
+
+export const AuthVerifyTotpResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary End the current session
+ */
+export const AuthLogoutResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary Return current authenticated user
+ */
+export const AuthMeResponse = zod.object({
+  "user": zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "name": zod.string(),
+  "role": zod.string(),
+  "totpEnabled": zod.boolean()
+})
+})
+
+
+/**
+ * @summary Begin TOTP enrollment — returns otpauth URI
+ */
+export const AuthTotpEnrollResponse = zod.object({
+  "otpauthUrl": zod.string(),
+  "secret": zod.string()
+})
+
+
+/**
+ * @summary Confirm TOTP enrollment with first code
+ */
+export const authTotpConfirmBodyCodeMin = 6;
+export const authTotpConfirmBodyCodeMax = 8;
+
+
+
+export const AuthTotpConfirmBody = zod.object({
+  "code": zod.string().min(authTotpConfirmBodyCodeMin).max(authTotpConfirmBodyCodeMax)
+})
+
+export const AuthTotpConfirmResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * @summary List inquiries (paginated)
+ */
+
+
+
+export const AdminListInquiriesQueryParams = zod.object({
+  "status": zod.enum(['new', 'read', 'archived']).optional(),
+  "page": zod.coerce.number().min(1).optional()
+})
+
+export const AdminListInquiriesResponse = zod.object({
+  "inquiries": zod.array(zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullish(),
+  "affiliation": zod.string(),
+  "inquiryType": zod.string(),
+  "message": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "createdAt": zod.string(),
+  "readAt": zod.string().nullish()
+})),
+  "pagination": zod.object({
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "total": zod.number(),
+  "totalPages": zod.number()
+}),
+  "unreadCount": zod.number()
+})
+
+
+/**
+ * @summary Get a single inquiry (marks as read)
+ */
+export const AdminGetInquiryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AdminGetInquiryResponse = zod.object({
+  "inquiry": zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullish(),
+  "affiliation": zod.string(),
+  "inquiryType": zod.string(),
+  "message": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "createdAt": zod.string(),
+  "readAt": zod.string().nullish()
+})
+})
+
+
+/**
+ * @summary Update inquiry status
+ */
+export const AdminPatchInquiryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const AdminPatchInquiryBody = zod.object({
+  "status": zod.enum(['new', 'read', 'archived'])
+})
+
+export const AdminPatchInquiryResponse = zod.object({
+  "inquiry": zod.object({
+  "id": zod.string(),
+  "fullName": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullish(),
+  "affiliation": zod.string(),
+  "inquiryType": zod.string(),
+  "message": zod.string(),
+  "status": zod.string(),
+  "source": zod.string(),
+  "createdAt": zod.string(),
+  "readAt": zod.string().nullish()
+})
 })
 
 

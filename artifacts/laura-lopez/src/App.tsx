@@ -12,9 +12,22 @@ import Contact from "@/pages/Contact";
 import Listings from "@/pages/Listings";
 import Sold from "@/pages/Sold";
 
+// Admin
+import AdminLayout from "@/components/admin/AdminLayout";
+import { ProtectedRoute } from "@/components/admin/ProtectedRoute";
+import AdminLogin from "@/pages/admin/Login";
+import TotpSetup from "@/pages/admin/TotpSetup";
+import AdminDashboard from "@/pages/admin/Dashboard";
+import AdminInquiries from "@/pages/admin/Inquiries";
+import AdminTransactions from "@/pages/admin/Transactions";
+import AdminContent from "@/pages/admin/Content";
+import AdminIntelligence from "@/pages/admin/Intelligence";
+import AdminContacts from "@/pages/admin/Contacts";
+import AdminSettings from "@/pages/admin/Settings";
+
 const queryClient = new QueryClient();
 
-function Router() {
+function PublicRouter() {
   return (
     <Layout>
       <Switch>
@@ -31,12 +44,45 @@ function Router() {
   );
 }
 
+function AdminRouter() {
+  return (
+    <Switch>
+      {/* Unauthenticated admin routes */}
+      <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin/totp-setup" component={TotpSetup} />
+
+      {/* Protected admin routes — all wrapped in ProtectedRoute + AdminLayout */}
+      <Route path="/admin/:rest*">
+        <ProtectedRoute>
+          <AdminLayout>
+            <Switch>
+              <Route path="/admin" component={AdminDashboard} />
+              <Route path="/admin/inquiries" component={AdminInquiries} />
+              <Route path="/admin/transactions" component={AdminTransactions} />
+              <Route path="/admin/content" component={AdminContent} />
+              <Route path="/admin/intelligence" component={AdminIntelligence} />
+              <Route path="/admin/contacts" component={AdminContacts} />
+              <Route path="/admin/settings/totp-setup" component={TotpSetup} />
+              <Route path="/admin/settings" component={AdminSettings} />
+              <Route component={NotFound} />
+            </Switch>
+          </AdminLayout>
+        </ProtectedRoute>
+      </Route>
+    </Switch>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
+          <Switch>
+            <Route path="/admin/:rest*" component={AdminRouter} />
+            <Route path="/admin" component={AdminRouter} />
+            <Route component={PublicRouter} />
+          </Switch>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

@@ -44,3 +44,103 @@ export interface ErrorResponse {
   fields?: ErrorResponseFields;
 }
 
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  requiresTotp: boolean;
+  requiresTotpSetup: boolean;
+}
+
+export interface TotpCodeRequest {
+  /**
+     * @minLength 6
+     * @maxLength 8
+     */
+  code: string;
+}
+
+export interface OkResponse {
+  ok: boolean;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  totpEnabled: boolean;
+}
+
+export interface MeResponse {
+  user: AdminUser;
+}
+
+export interface TotpEnrollResponse {
+  otpauthUrl: string;
+  secret: string;
+}
+
+export interface AdminInquiry {
+  id: string;
+  fullName: string;
+  email: string;
+  phone?: string | null;
+  affiliation: string;
+  inquiryType: string;
+  message: string;
+  status: string;
+  source: string;
+  createdAt: string;
+  readAt?: string | null;
+}
+
+export type AdminInquiriesResponsePagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+export interface AdminInquiriesResponse {
+  inquiries: AdminInquiry[];
+  pagination: AdminInquiriesResponsePagination;
+  unreadCount: number;
+}
+
+export interface AdminInquiryResponse {
+  inquiry: AdminInquiry;
+}
+
+export type PatchInquiryRequestStatus = typeof PatchInquiryRequestStatus[keyof typeof PatchInquiryRequestStatus];
+
+
+export const PatchInquiryRequestStatus = {
+  new: 'new',
+  read: 'read',
+  archived: 'archived',
+} as const;
+
+export interface PatchInquiryRequest {
+  status: PatchInquiryRequestStatus;
+}
+
+export type AdminListInquiriesParams = {
+status?: AdminListInquiriesStatus;
+/**
+ * @minimum 1
+ */
+page?: number;
+};
+
+export type AdminListInquiriesStatus = typeof AdminListInquiriesStatus[keyof typeof AdminListInquiriesStatus];
+
+
+export const AdminListInquiriesStatus = {
+  new: 'new',
+  read: 'read',
+  archived: 'archived',
+} as const;
+

@@ -1,0 +1,178 @@
+BRICK 2 — AUTH + ADMIN SHELL
+
+Build the authenticated admin foundation. Sections beyond 
+Inquiries are navigation stubs only — do NOT build their 
+internals.
+
+────────────────────────────────────────
+1. SCHEMA — lib/db/src/schema/users.ts
+────────────────────────────────────────
+users
+  id            uuid pk defaultRandom
+  email         text notNull unique
+  passwordHash  text notNull            // argon2id
+  name          text notNull
+  role          text notNull default 'admin'   // admin | staff
+  totpSecret    text nullable                  // encrypted at rest
+  totpEnabled   boolean notNull default false
+  lastLoginAt   timestamptz nullable
+  createdAt     timestamptz notNull defaultNow
+  disabledAt    timestamptz nullable
+
+sessions
+  id            uuid pk defaultRandom
+  userId        uuid notNull -> users.id, onDelete cascade
+  expiresAt     timestamptz notNull
+  createdAt     timestamptz notNull defaultNow
+  userAgent     text nullable
+  ipHash        text nullable
+
+  index on userId, index on expiresAt
+
+auth_events                        // append-only audit log
+  id, userId (nullable), email, action, success (bool),
+  ipHash, userAgent, createdAt
+  action: login | logout | totp_fail | password_fail |
+          totp_enrolled | session_expired
+
+Use argon2id via the `argon2` package. Never bcrypt.
+Encrypt totpSecret with AES-256-GCM using SESSION_SECRET-derived
+key — do NOT store the TOTP secret in plaintext.
+
+────────────────────────────────────────
+2. AUTH FLOW
+────────────────────────────────────────
+Session-based, httpOnly cookie. NOT JWT.
+
+Cookie: name `sid`, httpOnly, sameSite 'lax', secure in
+production, maxAge 8 hours, signed with SESSION_SECRET.
+
+Endpoints (add to openapi.yaml, then run codegen):
+  POST /auth/login       { email, password } -> requires TOTP step
+  POST /auth/verify-totp { code }            -> issues session
+  POST /auth/logout
+  GET  /auth/me                              -> current user or 401
+  POST /auth/totp/enroll                     -> returns otpauth URI
+  POST /auth/totp/confirm { code }           -> sets totpEnabled
+
+TOTP is MANDATORY per portfolio standard. A user with
+totpEnabled=false can ONLY reach the enrollment endpoints —
+every other admin route returns 403 until enrollment completes.
+
+Rate limit login: 5 attempts per email per 15 min, and 20 per IP
+per 15 min. Log every attempt to auth_events. On failure return
+a generic "Invalid credentials" — never reveal whether the email
+exists.
+
+Timing: always run the argon2 verify even when the email is not
+found, against a dummy hash, so response time does not leak
+account existence.
+
+────────────────────────────────────────
+3. MIDDLEWARE — api-server/src/middlewares/requireAuth.ts
+────────────────────────────────────────
+  - Reads sid cookie, looks up session, checks expiresAt.
+  - Expired session: delete row, clear cookie, 401.
+  - Attaches req.user.
+  - requireRole(role) variant for later use.
+  - Sliding expiry: if the session is more than halfway to
+    expiry, extend it and reissue the cookie.
+
+Mount on /api/admin/* — every admin route inherits it. Do not
+apply auth per-route; apply it at the router level so a new
+route cannot accidentally ship unprotected.
+
+────────────────────────────────────────
+4. ADMIN SHELL — artifacts/laura-lopez/src/pages/admin/
+────────────────────────────────────────
+Routes under /admin, registered in App.tsx:
+
+  /admin/login
+  /admin                  -> Dashboard
+  /admin/inquiries        -> BUILD THIS ONE
+  /admin/transactions     -> stub
+  /admin/content          -> stub
+  /admin/intelligence     -> stub
+  /admin/contacts         -> stub
+  /admin/settings         -> stub
+
+AdminLayout component: persistent sidebar nav, current user in
+the header, logout button. Responsive — sidebar collapses to a
+drawer below md, same scroll-lock pattern as the public Navbar.
+
+Stubs render a heading plus "Coming in a later phase." No
+placeholder tables, no fake data, no mock charts.
+
+Protected route wrapper: unauthenticated -> redirect /admin/login.
+Authenticated without TOTP -> force /admin/settings/totp-setup.
+
+The admin uses the same palette and fonts as the public site but
+a DENSER layout — this is a working tool, not a brochure.
+Smaller type, tighter spacing, real tables.
+
+────────────────────────────────────────
+5. INQUIRIES SECTION — the one real section
+────────────────────────────────────────
+  GET   /api/admin/inquiries       list, paginated, filter by
+                                   status, sort by createdAt desc
+  GET   /api/admin/inquiries/:id   detail
+  PATCH /api/admin/inquiries/:id   { status } -> new|read|archived
+
+UI: table with name, email, type, affiliation, date, status.
+Click a row for a detail panel with the full message and a
+mailto: link prefilled with the reply address. Status change
+sets readAt on first read.
+
+Show the total unread count as a badge in the sidebar.
+
+────────────────────────────────────────
+6. SEED — scripts/src/seed-admin.ts
+────────────────────────────────────────
+One-time script creating the first admin from env:
+  ADMIN_SEED_EMAIL, ADMIN_SEED_PASSWORD, ADMIN_SEED_NAME
+
+Must be idempotent — if the email exists, exit without changes.
+totpEnabled starts false so the first login forces enrollment.
+Refuse to run if ADMIN_SEED_PASSWORD is under 16 characters.
+
+────────────────────────────────────────
+7. ENV — new vars
+────────────────────────────────────────
+  SESSION_SECRET        required, throw on startup if missing
+  ADMIN_SEED_EMAIL      seed script only
+  ADMIN_SEED_PASSWORD   seed script only
+  ADMIN_SEED_NAME       seed script only
+
+Generate SESSION_SECRET as a random 64-byte hex string now. It
+is not a third-party credential.
+
+────────────────────────────────────────
+8. robots.txt
+────────────────────────────────────────
+Add: Disallow: /admin
+
+────────────────────────────────────────
+ACCEPTANCE
+────────────────────────────────────────
+1.  typecheck passes clean.
+2.  Unauthenticated GET /api/admin/inquiries -> 401.
+3.  Unauthenticated visit to /admin -> redirect to /admin/login.
+4.  Login with correct password but no TOTP -> cannot reach any
+    admin route except enrollment.
+5.  TOTP enrollment produces a scannable URI; a code from any
+    standard authenticator app completes it.
+6.  Full login -> session cookie set, httpOnly verified in
+    devtools, /auth/me returns the user.
+7.  6th failed login for one email inside 15 min -> rate limited.
+8.  Wrong email and wrong password produce identical error text
+    AND comparable response times.
+9.  Logout clears the cookie and deletes the session row.
+10. Manually expire a session row -> next request 401 and the
+    cookie is cleared.
+11. Inquiry submitted on the public form appears in /admin/inquiries.
+12. Status change persists and the sidebar badge updates.
+13. Admin shell usable at 375px wide.
+14. auth_events has a row for every login attempt, success or fail.
+
+Report each with evidence. Do not report a check as passing
+without having actually run it.
