@@ -3,6 +3,39 @@ import { createHash } from "crypto";
 import { db, inquiriesTable } from "@workspace/db";
 import { CreateInquiryBody } from "@workspace/api-zod";
 import { sendInquiryNotification } from "../lib/mailer";
+import { logger } from "../lib/logger";
+
+// ---------------------------------------------------------------------------
+// IP salt — read once at module load
+// In production, missing salt is a startup-blocking error.
+// In dev, allowed but every use logs a WARN.
+// ---------------------------------------------------------------------------
+const IP_SALT = process.env.INQUIRY_IP_SALT;
+
+if (!IP_SALT) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "INQUIRY_IP_SALT must be set in production — aborting startup. " +
+        "Set it to a random 32-byte hex string in your environment secrets.",
+    );
+  }
+  // Dev: warn at load time so it's visible in the startup log
+  logger.warn(
+    "INQUIRY_IP_SALT is not set — IP hashes are insecure. " +
+      "Set INQUIRY_IP_SALT before deploying to production.",
+  );
+}
+
+function hashIp(ip: string): string {
+  if (!IP_SALT) {
+    // Dev fallback — warn on every use so the problem is unmistakable
+    logger.warn(
+      "hashIp called without INQUIRY_IP_SALT — using insecure dev fallback",
+    );
+    return createHash("sha256").update(ip + "dev-insecure").digest("hex");
+  }
+  return createHash("sha256").update(ip + IP_SALT).digest("hex");
+}
 
 // ---------------------------------------------------------------------------
 // Whitelists — must match ContactForm.tsx exactly
@@ -27,29 +60,44 @@ const VALID_INQUIRY_TYPES = new Set([
 // NOTE: This limiter does not survive autoscale multi-instance deployments.
 // Move to a DB-backed counter before real traffic at scale.
 // ---------------------------------------------------------------------------
+const WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const MAX_PER_WINDOW = 5;
 const ipSubmissions = new Map<string, number[]>();
+
+// Periodic sweep: remove entries whose newest timestamp is outside the window.
+// unref'd so it does not keep the process alive on shutdown.
+const sweepInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, timestamps] of ipSubmissions) {
+    const newest = timestamps.length > 0 ? Math.max(...timestamps) : 0;
+    if (now - newest >= WINDOW_MS) {
+      ipSubmissions.delete(ip);
+    }
+  }
+}, 10 * 60 * 1000); // every 10 minutes
+sweepInterval.unref();
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
-  const windowMs = 60 * 60 * 1000; // 1 hour
-  const maxPerWindow = 5;
 
   const timestamps = (ipSubmissions.get(ip) ?? []).filter(
-    (t) => now - t < windowMs,
+    (t) => now - t < WINDOW_MS,
   );
 
-  if (timestamps.length >= maxPerWindow) {
+  // After pruning, clean up the Map entry if it's now empty
+  if (timestamps.length === 0) {
+    ipSubmissions.delete(ip);
+  } else {
+    ipSubmissions.set(ip, timestamps);
+  }
+
+  if (timestamps.length >= MAX_PER_WINDOW) {
     return true;
   }
 
   timestamps.push(now);
   ipSubmissions.set(ip, timestamps);
   return false;
-}
-
-function hashIp(ip: string): string {
-  const salt = process.env.INQUIRY_IP_SALT ?? "default-dev-salt";
-  return createHash("sha256").update(ip + salt).digest("hex");
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +183,10 @@ router.post("/inquiries", async (req, res): Promise<void> => {
       createdAt: row.createdAt,
     });
   } catch (err) {
-    req.log.error({ err, inquiryId: row.id }, "email notification failed — lead is saved, continuing");
+    req.log.error(
+      { err, inquiryId: row.id },
+      "email notification failed — lead is saved, continuing",
+    );
   }
 
   // 7. Return 201

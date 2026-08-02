@@ -18,7 +18,7 @@ export async function sendInquiryNotification(
   const apiKey = process.env.RESEND_API_KEY;
   const notifyEmail = process.env.INQUIRY_NOTIFY_EMAIL;
   const fromEmail =
-    process.env.INQUIRY_FROM_EMAIL ?? "notifications@lauralopez.com";
+    process.env.INQUIRY_FROM_EMAIL ?? "notifications@listedwithlopez.com";
 
   if (!apiKey || !notifyEmail) {
     logger.info(
