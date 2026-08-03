@@ -4,3 +4,5 @@
 - [Test runner for api-server](test-runner.md) — api-server has no tsx dep; run tests via scripts package tsx binary at `scripts/node_modules/.bin/tsx`
 - [Admin auth cookie fallbacks](admin-auth-cookie-fallbacks.md) — Chrome blocks SameSite=None cookies in cross-origin iframes; both pending and session tokens need header fallbacks
 - [Admin router bare path bug](admin-router-bare-path.md) — wouter :rest* does not match zero segments; bare /admin needs its own explicit route entry
+- [Express params cast](express-params-cast.md) — req.params destructure types as string|string[] in this monorepo; use `req.params['id'] as string` to satisfy drizzle eq() overloads
+- [Brick 6 contacts](brick6-contacts.md) — migration 0005 applied; contacts + contact_interactions tables live; contacts router mounted at /admin/contacts; no auto-subscribe rule enforced at API layer
