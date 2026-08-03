@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { createHash } from "crypto";
 import { db, inquiriesTable } from "@workspace/db";
-import { CreateInquiryBody } from "@workspace/api-zod";
+import { CreateInquiryBody, INTEL_CONSENT_TEXT } from "@workspace/api-zod";
 import { sendInquiryNotification } from "../lib/mailer";
 import { logger } from "../lib/logger";
 
@@ -116,7 +116,7 @@ router.post("/inquiries", async (req, res): Promise<void> => {
     return;
   }
 
-  const { fullName, email, phone, affiliation, inquiryType, message, website } =
+  const { fullName, email, phone, affiliation, inquiryType, message, website, subscribeIntelligence } =
     parsed.data;
 
   // 2. Honeypot: silent discard — bot must not learn it was caught
@@ -161,6 +161,9 @@ router.post("/inquiries", async (req, res): Promise<void> => {
         message,
         userAgent: req.headers["user-agent"] ?? null,
         ipHash: hashIp(rawIp),
+        subscribeIntelligence: subscribeIntelligence === true,
+        consentText: subscribeIntelligence === true ? INTEL_CONSENT_TEXT : null,
+        consentAt: subscribeIntelligence === true ? new Date() : null,
       })
       .returning();
     row = inserted;

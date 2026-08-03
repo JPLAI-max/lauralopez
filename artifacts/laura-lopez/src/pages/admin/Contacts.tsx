@@ -407,6 +407,15 @@ function ContactDetail({
           )}
         </div>
 
+        {/* Consent provenance — shown whenever subscribedAt is set */}
+        {contact.subscribedAt && (
+          <p className="text-xs text-emerald-700/80">
+            {contact.source === "inquiry"
+              ? `Opted in via website inquiry, ${fmtDate(contact.subscribedAt)}`
+              : `Subscribed ${fmtDate(contact.subscribedAt)}`}
+          </p>
+        )}
+
         {/* Contact fields */}
         <div className="grid grid-cols-1 gap-1 text-xs">
           {contact.email && (

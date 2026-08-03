@@ -300,6 +300,21 @@ export default function AdminInquiries() {
               </p>
             </div>
 
+            {/* Intelligence opt-in */}
+            {(selected as any).subscribeIntelligence ? (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2">
+                <span>✓</span>
+                <span>
+                  Opted in to Market Intelligence
+                  {(selected as any).consentAt
+                    ? ` · ${new Date((selected as any).consentAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                    : ""}
+                </span>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Did not opt in to Market Intelligence</p>
+            )}
+
             {/* Reply */}
             <a
               href={`mailto:${selected.email}?subject=Re: Your Inquiry — Laura Lopez&body=Dear ${selected.fullName},%0A%0A`}

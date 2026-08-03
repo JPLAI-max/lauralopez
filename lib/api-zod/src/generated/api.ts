@@ -42,7 +42,8 @@ export const CreateInquiryBody = zod.object({
   "affiliation": zod.string().max(createInquiryBodyAffiliationMax),
   "inquiryType": zod.string().max(createInquiryBodyInquiryTypeMax),
   "message": zod.string().min(createInquiryBodyMessageMin).max(createInquiryBodyMessageMax),
-  "website": zod.string().optional().describe('Honeypot field — must be empty')
+  "website": zod.string().optional().describe('Honeypot field — must be empty'),
+  "subscribeIntelligence": zod.boolean().optional().describe('Explicit opt-in to Market Intelligence briefings — must be false by default, only true if the user checks the box')
 })
 
 

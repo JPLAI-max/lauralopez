@@ -27,4 +27,6 @@ export interface CreateInquiryRequest {
   message: string;
   /** Honeypot field — must be empty */
   website?: string;
+  /** Explicit opt-in to Market Intelligence briefings — must be false by default, only true if the user checks the box */
+  subscribeIntelligence?: boolean;
 }

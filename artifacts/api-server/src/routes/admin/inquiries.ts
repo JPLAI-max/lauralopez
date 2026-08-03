@@ -168,18 +168,33 @@ router.post("/:id/to-contact", async (req: Request, res: Response): Promise<void
   }
 
   if (existingContact) {
-    // Append message as a new interaction; do NOT change subscribedIntelligence
+    // Append message as a new interaction
     await db.insert(contactInteractionsTable).values({
       contactId: existingContact.id,
       ownerId,
       kind: "note",
       body: `From inquiry (${inquiry.inquiryType}): ${inquiry.message}`,
     });
+
+    // Consent can only turn subscription ON, never off.
+    // Never clear an existing unsubscribedAt — rule 6 from spec.
+    if (inquiry.subscribeIntelligence && !existingContact.unsubscribedAt && !existingContact.subscribedIntelligence) {
+      await db.update(contactsTable)
+        .set({
+          subscribedIntelligence: true,
+          subscribedAt: inquiry.consentAt ?? new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(contactsTable.id, existingContact.id));
+      existingContact.subscribedIntelligence = true;
+      existingContact.subscribedAt = inquiry.consentAt ?? new Date();
+    }
+
     res.json({ contact: existingContact, merged: true });
     return;
   }
 
-  // Create new contact
+  // Create new contact — carry consent through if the inquiry had opt-in
   const [contact] = await db.insert(contactsTable).values({
     ownerId,
     firstName,
@@ -189,7 +204,8 @@ router.post("/:id/to-contact", async (req: Request, res: Response): Promise<void
     contactType,
     source:         "inquiry",
     sourceInquiryId: inquiry.id,
-    subscribedIntelligence: false, // submitting an inquiry is NOT consent
+    subscribedIntelligence: inquiry.subscribeIntelligence === true,
+    subscribedAt:   inquiry.subscribeIntelligence === true ? (inquiry.consentAt ?? new Date()) : null,
   }).returning();
 
   // Copy message as a note interaction

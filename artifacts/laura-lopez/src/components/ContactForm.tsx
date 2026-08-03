@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateInquiry } from "@workspace/api-client-react";
+import { INTEL_CONSENT_TEXT } from "@workspace/api-zod";
 
 const formSchema = z.object({
   fullName: z.string().min(2, "Name is required"),
@@ -17,6 +18,7 @@ const formSchema = z.object({
   inquiryType: z.string().min(1, "Please select an inquiry type"),
   message: z.string().min(10, "Please provide some details"),
   website: z.string().optional(), // honeypot
+  subscribeIntelligence: z.boolean().default(false),
 });
 
 export default function ContactForm() {
@@ -33,6 +35,7 @@ export default function ContactForm() {
       inquiryType: "",
       message: "",
       website: "",
+      subscribeIntelligence: false,
     },
   });
 
@@ -187,6 +190,31 @@ export default function ContactForm() {
                 />
               </FormControl>
               <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Market Intelligence opt-in — unchecked by default, never pre-ticked */}
+        <FormField
+          control={form.control}
+          name="subscribeIntelligence"
+          render={({ field }) => (
+            <FormItem className="flex items-start gap-3">
+              <FormControl>
+                <input
+                  type="checkbox"
+                  id="subscribe-intelligence"
+                  checked={field.value}
+                  onChange={(e) => field.onChange(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 border border-border accent-primary cursor-pointer"
+                />
+              </FormControl>
+              <label
+                htmlFor="subscribe-intelligence"
+                className="text-xs text-foreground/60 leading-relaxed cursor-pointer"
+              >
+                {INTEL_CONSENT_TEXT}
+              </label>
             </FormItem>
           )}
         />

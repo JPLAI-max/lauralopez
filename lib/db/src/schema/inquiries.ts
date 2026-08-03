@@ -3,6 +3,7 @@ import {
   text,
   uuid,
   timestamp,
+  boolean,
   index,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -26,6 +27,9 @@ export const inquiriesTable = pgTable(
       .notNull()
       .defaultNow(),
     readAt: timestamp("read_at", { withTimezone: true }),
+    subscribeIntelligence: boolean("subscribe_intelligence").notNull().default(false),
+    consentText: text("consent_text"),
+    consentAt: timestamp("consent_at", { withTimezone: true }),
   },
   (table) => [
     index("inquiries_created_at_idx").on(table.createdAt),
@@ -41,6 +45,8 @@ export const insertInquirySchema = createInsertSchema(inquiriesTable).omit({
   userAgent: true,
   createdAt: true,
   readAt: true,
+  consentText: true,
+  consentAt: true,
 });
 
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;

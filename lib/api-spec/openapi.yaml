@@ -308,6 +308,9 @@ components:
         website:
           type: string
           description: Honeypot field — must be empty
+        subscribeIntelligence:
+          type: boolean
+          description: Explicit opt-in to Market Intelligence briefings — must be false by default, only true if the user checks the box
       required: [fullName, email, affiliation, inquiryType, message]
     CreateInquiryResponse:
       type: object
