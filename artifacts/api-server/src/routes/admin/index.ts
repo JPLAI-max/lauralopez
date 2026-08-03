@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireAuth, requireTotpEnrolled } from "../../middlewares/requireAuth";
 import inquiriesAdminRouter from "./inquiries";
+import contactsAdminRouter from "./contacts";
 import transactionsAdminRouter from "./transactions";
 import mediaAdminRouter from "./media";
 import slotsAdminRouter from "./slots";
@@ -18,6 +19,7 @@ const router: IRouter = Router();
 router.use(requireAuth, requireTotpEnrolled);
 
 router.use("/inquiries",            inquiriesAdminRouter);
+router.use("/contacts",             contactsAdminRouter);
 router.use("/",                     transactionsAdminRouter);
 router.use("/media",                mediaAdminRouter);
 router.use("/slots",                slotsAdminRouter);

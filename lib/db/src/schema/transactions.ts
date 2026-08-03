@@ -38,6 +38,7 @@ export const transactionsTable = pgTable(
     coopBrokerage: text("coop_brokerage"),
     notes: text("notes"),
     icsToken: text("ics_token").notNull().unique(), // 32-byte random hex; public calendar auth
+    contactId: uuid("contact_id"), // nullable FK to contacts.id — set via contacts router
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp("closed_at", { withTimezone: true }),

@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, inquiriesTable } from "@workspace/db";
-import { eq, desc, count } from "drizzle-orm";
+import { db, inquiriesTable, contactsTable, contactInteractionsTable } from "@workspace/db";
+import { eq, desc, count, and, sql } from "drizzle-orm";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -119,6 +119,88 @@ router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
     .returning();
 
   res.json({ inquiry: updated });
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/inquiries/:id/to-contact
+// Converts an inquiry into a contact (or links to existing by email).
+// ---------------------------------------------------------------------------
+const AFFILIATION_TO_CONTACT_TYPE: Record<string, string> = {
+  buyer:     "client",
+  seller:    "client",
+  both:      "client",
+  investor:  "client",
+  agent:     "agent",
+  attorney:  "attorney",
+  developer: "vendor",
+};
+
+router.post("/:id/to-contact", async (req: Request, res: Response): Promise<void> => {
+  const ownerId = req.user!.id;
+  const id = req.params['id'] as string;
+
+  const rows = await db.select().from(inquiriesTable).where(eq(inquiriesTable.id, id)).limit(1);
+  if (rows.length === 0) { res.status(404).json({ error: "Inquiry not found" }); return; }
+  const inquiry = rows[0]!;
+
+  // Split fullName: last word is lastName; everything else is firstName
+  const nameParts = inquiry.fullName.trim().split(/\s+/);
+  const firstName = nameParts.length > 1 ? nameParts.slice(0, -1).join(" ") : nameParts[0]!;
+  const lastName  = nameParts.length > 1 ? nameParts[nameParts.length - 1]! : "";
+
+  const contactType = AFFILIATION_TO_CONTACT_TYPE[inquiry.affiliation.toLowerCase()] ?? "other";
+
+  // Check for existing non-archived contact with same email (dedupe)
+  let existingContact: typeof contactsTable.$inferSelect | null = null;
+  if (inquiry.email) {
+    const existing = await db
+      .select()
+      .from(contactsTable)
+      .where(
+        and(
+          eq(contactsTable.ownerId, ownerId),
+          sql`lower(${contactsTable.email}) = lower(${inquiry.email})`,
+          eq(contactsTable.archived, false),
+        )
+      )
+      .limit(1);
+    if (existing.length > 0) existingContact = existing[0]!;
+  }
+
+  if (existingContact) {
+    // Append message as a new interaction; do NOT change subscribedIntelligence
+    await db.insert(contactInteractionsTable).values({
+      contactId: existingContact.id,
+      ownerId,
+      kind: "note",
+      body: `From inquiry (${inquiry.inquiryType}): ${inquiry.message}`,
+    });
+    res.json({ contact: existingContact, merged: true });
+    return;
+  }
+
+  // Create new contact
+  const [contact] = await db.insert(contactsTable).values({
+    ownerId,
+    firstName,
+    lastName,
+    email:          inquiry.email,
+    phone:          inquiry.phone ?? null,
+    contactType,
+    source:         "inquiry",
+    sourceInquiryId: inquiry.id,
+    subscribedIntelligence: false, // submitting an inquiry is NOT consent
+  }).returning();
+
+  // Copy message as a note interaction
+  await db.insert(contactInteractionsTable).values({
+    contactId: contact!.id,
+    ownerId,
+    kind: "note",
+    body: `From inquiry (${inquiry.inquiryType}): ${inquiry.message}`,
+  });
+
+  res.status(201).json({ contact, merged: false });
 });
 
 export default router;

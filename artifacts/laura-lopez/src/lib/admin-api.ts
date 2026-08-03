@@ -174,6 +174,8 @@ export interface InquiriesResponse {
 }
 
 export const adminApi = {
+  inquiryToContact: (id: string) =>
+    apiFetch<{ contact: Contact; merged: boolean }>(`/admin/inquiries/${id}/to-contact`, { method: "POST" }),
   listInquiries: (params?: { status?: string; page?: number }) => {
     const qs = new URLSearchParams();
     if (params?.status) qs.set("status", params.status);
@@ -739,6 +741,100 @@ export const marketingTemplateApi = {
 // ---------------------------------------------------------------------------
 // Campaign API client
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Contacts
+// ---------------------------------------------------------------------------
+export interface Contact {
+  id: string;
+  ownerId: string;
+  officeId: string | null;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  title: string | null;
+  contactType: string;
+  neighborhood: string | null;
+  address: string | null;
+  source: string;
+  sourceInquiryId: string | null;
+  notes: string | null;
+  tags: string[];
+  subscribedIntelligence: boolean;
+  subscribedAt: string | null;
+  unsubscribedAt: string | null;
+  lastContactedAt: string | null;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContactInteraction {
+  id: string;
+  contactId: string;
+  ownerId: string;
+  kind: string;
+  body: string;
+  occurredAt: string;
+  createdAt: string;
+}
+
+export interface ContactsListResponse {
+  contacts: Contact[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  intelligenceCount: number;
+}
+
+export interface ContactDetailResponse {
+  contact: Contact;
+  interactions: ContactInteraction[];
+  transactions: Array<{
+    id: string;
+    propertyAddress: string;
+    status: string;
+    side: string;
+    clientName: string;
+    createdAt: string;
+  }>;
+}
+
+export interface ImportResult {
+  dryRun: boolean;
+  created: number;
+  merged: number;
+  skipped: number;
+  preview: Array<{ action: "create" | "merge"; email: string | null; name: string }>;
+}
+
+export const contactsApi = {
+  list: (params?: { contactType?: string; search?: string; subscribed?: boolean; archived?: boolean; page?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.contactType) q.set("contactType", params.contactType);
+    if (params?.search) q.set("search", params.search);
+    if (params?.subscribed) q.set("subscribed", "true");
+    if (params?.archived) q.set("archived", "true");
+    if (params?.page) q.set("page", String(params.page));
+    return apiFetch<ContactsListResponse>(`/admin/contacts?${q}`);
+  },
+  create: (body: Partial<Contact>) =>
+    apiFetch<{ contact: Contact }>("/admin/contacts", { method: "POST", json: body }),
+  get: (id: string) =>
+    apiFetch<ContactDetailResponse>(`/admin/contacts/${id}`),
+  update: (id: string, body: Partial<Contact>) =>
+    apiFetch<{ contact: Contact }>(`/admin/contacts/${id}`, { method: "PATCH", json: body }),
+  archive: (id: string) =>
+    apiFetch<{ contact: Contact }>(`/admin/contacts/${id}/archive`, { method: "POST" }),
+  addInteraction: (id: string, body: { kind: string; body: string; occurredAt?: string }) =>
+    apiFetch<{ interaction: ContactInteraction }>(`/admin/contacts/${id}/interactions`, { method: "POST", json: body }),
+  subscribe: (id: string) =>
+    apiFetch<{ contact: Contact }>(`/admin/contacts/${id}/subscribe`, { method: "POST" }),
+  unsubscribe: (id: string) =>
+    apiFetch<{ contact: Contact }>(`/admin/contacts/${id}/unsubscribe`, { method: "POST" }),
+  import: (rows: unknown[], dryRun: boolean) =>
+    apiFetch<ImportResult>("/admin/contacts/import", { method: "POST", json: { rows, dryRun } }),
+};
+
 export const campaignApi = {
   templates: {
     list: () =>

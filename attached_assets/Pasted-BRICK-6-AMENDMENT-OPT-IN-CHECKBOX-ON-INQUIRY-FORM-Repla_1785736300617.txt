@@ -1,0 +1,68 @@
+BRICK 6 — AMENDMENT: OPT-IN CHECKBOX ON INQUIRY FORM
+
+Replaces the "never auto-subscribe" handling with explicit
+consent captured at submission.
+
+1. SCHEMA — inquiries table, additive migration
+   Add:
+     subscribeIntelligence  boolean notNull default false
+     consentText            text nullable
+     consentAt              timestamptz nullable
+
+   consentText stores the EXACT wording shown at the time of
+   consent. If the label is ever reworded, old records still
+   prove what the person actually agreed to.
+
+2. PUBLIC FORM — ContactForm.tsx
+   Add a checkbox below the message field, above submit:
+
+     [ ] Send me Laura's Market Intelligence — periodic briefings
+         on Beverly Hills market activity, regulation, and
+         architecture.
+
+   UNCHECKED by default. Never pre-check it. Do not style it to
+   look pre-selected.
+
+   Add to the API contract in openapi.yaml as an optional
+   boolean, then run codegen.
+
+3. SERVER
+   On submission, if the box is checked, store
+   subscribeIntelligence true, consentAt now, and consentText
+   set to the exact label string rendered. Define that label as
+   a single exported constant shared by the form and the server
+   so the two can never drift.
+
+4. SAVE TO CONTACTS
+   POST /api/admin/inquiries/:id/to-contact now carries consent
+   through: if the inquiry has subscribeIntelligence true, the
+   contact gets subscribedIntelligence true and subscribedAt set
+   from consentAt.
+
+   If false, the contact is created unsubscribed. Laura can
+   subscribe them manually later from the contact detail — that
+   is a deliberate action, not a default.
+
+   On dedupe into an existing contact: consent can only turn
+   subscription ON, never off. An existing unsubscribedAt is
+   never cleared by a new inquiry.
+
+5. ADMIN VISIBILITY
+   Inquiry detail shows whether they opted in, and the timestamp.
+   Contact detail shows the consent source and date — "Opted in
+   via website inquiry, Aug 2 2026" — so the provenance of every
+   subscriber is visible.
+
+ACCEPTANCE
+1. Checkbox renders unchecked on a fresh form load.
+2. Submitting unchecked -> inquiry has subscribeIntelligence
+   false, consentAt null.
+3. Submitting checked -> true, consentAt stamped, consentText
+   matches the rendered label exactly.
+4. Save to Contacts from a checked inquiry -> contact is
+   subscribed with subscribedAt carried from consentAt.
+5. Save to Contacts from an unchecked inquiry -> contact
+   unsubscribed.
+6. A previously unsubscribed contact submitting a new checked
+   inquiry does NOT get resubscribed automatically.
+7. Consent source and date visible on contact detail.

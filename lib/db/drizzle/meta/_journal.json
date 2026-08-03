@@ -36,6 +36,13 @@
       "when": 1785805200000,
       "tag": "0004_brick59_totp_secret_set_at",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785808800000,
+      "tag": "0005_brick6_contacts",
+      "breakpoints": true
     }
   ]
 }

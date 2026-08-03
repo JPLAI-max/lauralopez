@@ -1,0 +1,144 @@
+BRICK 6 — CONTACTS + INQUIRY LAYOUT FIX
+
+════════════════════════════════════════
+PART A — INQUIRIES LAYOUT
+════════════════════════════════════════
+The detail panel currently overlays the table and clips the
+STATUS column. Fix:
+
+1. Make it a true split: table column shrinks when the detail
+   panel opens, rather than being covered. Table gets a min
+   width; below lg the detail becomes a full-width drawer.
+2. No column may be clipped at any width. Verify STATUS is fully
+   visible with the panel open at 1280, 1440, 1920.
+3. Row density is too loose — reduce vertical padding roughly
+   30%. This is a working list, not a marketing page.
+4. Add a search field filtering on name, email, and message.
+
+════════════════════════════════════════
+PART B — CONTACTS
+════════════════════════════════════════
+ownerId notNull indexed, officeId nullable, on every table.
+Every read/update/delete filters on ownerId. Match
+transactions.ts.
+
+1. SCHEMA — lib/db/src/schema/contacts.ts
+
+contacts
+  id, ownerId, officeId
+  firstName, lastName    text notNull
+  email                  text nullable
+  phone                  text nullable
+  company                text nullable
+  title                  text nullable
+  contactType            text notNull default 'other'
+                         // client | attorney | wealth_manager |
+                         // trust_officer | family_office |
+                         // private_banker | agent | vendor | other
+  neighborhood           text nullable
+  address                text nullable
+  source                 text notNull default 'manual'
+                         // manual | inquiry | transaction | import
+  sourceInquiryId        uuid nullable -> inquiries.id
+  notes                  text nullable
+  tags                   jsonb notNull default '[]'
+  subscribedIntelligence boolean notNull default false
+  subscribedAt           timestamptz nullable
+  unsubscribedAt         timestamptz nullable
+  lastContactedAt        timestamptz nullable
+  archived               boolean notNull default false
+  createdAt, updatedAt
+
+  index on ownerId, contactType, email
+  partial unique on (ownerId, lower(email)) where email is not
+  null and archived is false
+
+contact_interactions        -- append only
+  id, contactId cascade, ownerId
+  kind      text notNull   // note | email | call | meeting | event
+  body      text notNull
+  occurredAt timestamptz notNull default now
+  createdAt
+
+Link contacts to existing records:
+  transactions   add contactId uuid nullable -> contacts.id
+  Additive migration. Do not backfill or alter existing rows.
+
+2. SAVE FROM INQUIRY — the button asked for
+   In the Inquiry Detail panel, add "Save to Contacts".
+
+   POST /api/admin/inquiries/:id/to-contact
+
+   - Splits fullName into first/last on the last space. Single
+     token goes to firstName.
+   - Maps the inquiry's affiliation to contactType where it
+     maps cleanly; otherwise 'other'.
+   - Sets source 'inquiry' and sourceInquiryId.
+   - Copies the message into a contact_interactions row of kind
+     'note'.
+   - subscribedIntelligence defaults FALSE. Submitting an
+     inquiry is not consent to a mailing list. Do not
+     auto-subscribe under any circumstance.
+
+   DEDUPE: if a non-archived contact already has that email,
+   do NOT create a duplicate. Return the existing contact and
+   append the message as a new interaction. The UI shows
+   "Linked to existing contact — {name}" rather than pretending
+   it created one.
+
+   After saving, the inquiry detail shows a link to the contact
+   instead of the button.
+
+3. ENDPOINTS — /api/admin/contacts
+   GET    /            list; filter contactType, tag, subscribed,
+                       archived; search name/email/company;
+                       paginated
+   POST   /            create
+   GET    /:id         detail with interactions and any linked
+                       transactions
+   PATCH  /:id         update
+   POST   /:id/archive soft only — never hard delete
+   POST   /:id/interactions   add note/call/meeting
+   POST   /:id/subscribe      sets subscribedIntelligence true,
+                              stamps subscribedAt
+   POST   /:id/unsubscribe    stamps unsubscribedAt, sets false
+
+   Unsubscribe must be permanent-by-default: a resubscribe
+   requires an explicit action, never a bulk import.
+
+4. IMPORT
+   POST /api/admin/contacts/import — CSV upload.
+   Preview mapping before committing. Dedupe on email.
+   Report created / merged / skipped counts.
+   Imported contacts are NEVER auto-subscribed regardless of
+   what the CSV contains.
+
+5. UI — replace the Contacts stub
+   List: name, type chip, company, neighborhood, last contacted,
+   subscribed indicator. Filter rail by contactType. Search.
+   Detail: fields, interaction timeline newest first, quick-add
+   note, linked transactions, subscribe toggle.
+   Dense layout. Usable at 375px.
+
+6. INTELLIGENCE LIST
+   The Market Intelligence distribution list is defined as
+   contacts where subscribedIntelligence is true and
+   unsubscribedAt is null and archived is false. Do not create a
+   separate list table. Show the live count on the Contacts page.
+
+ACCEPTANCE
+1.  Inquiry detail no longer clips STATUS at 1280/1440/1920.
+2.  Save to Contacts creates a contact with the message as an
+    interaction.
+3.  Saving the SAME inquirer twice links to the existing contact
+    and does not duplicate.
+4.  A contact created from an inquiry has
+    subscribedIntelligence false.
+5.  CSV import with 3 rows, one duplicate email -> reports
+    2 created, 1 merged.
+6.  Unsubscribe persists and the contact drops out of the
+    intelligence count.
+7.  Archive hides from the default list, hard delete is not
+    possible anywhere.
+8.  ownerId reference count per new file >= its query count.
+9.  Contacts usable at 375px.
