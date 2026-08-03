@@ -19,14 +19,20 @@
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { createRequire } from "node:module";
 import type { Sharp as SharpType } from "sharp";
+
+// createRequire is needed because sharp is a native CJS module.
+// The esbuild bundle injects globalThis.require via its banner, but when this
+// file is run directly through tsx (ESM mode), require is not defined.
+// Using createRequire makes both paths work correctly.
+const _require = createRequire(import.meta.url);
 
 type SharpConstructor = (input?: Buffer) => SharpType;
 let sharp: SharpConstructor | null = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  sharp = require("sharp") as SharpConstructor;
-} catch { /* sharp optional */ }
+  sharp = _require("sharp") as SharpConstructor;
+} catch { /* sharp optional — rendering will throw at call-site if null */ }
 
 import { putObject, isConfigured } from "./storage";
 import type { MarketingTemplate } from "@workspace/db";
@@ -67,9 +73,8 @@ interface WordmarkLayer    { type: "wordmark"; yPct: number; widthPct: number }
 
 type LayerDef = PhotoLayer | ScrimLayer | TextLayer | RuleLayer | WordmarkLayer;
 
-export interface TemplateDefinition {
-  layers: LayerDef[];
-}
+// The definition column stores a LayerDef[] array directly (not { layers: [...] }).
+export type TemplateDefinition = LayerDef[];
 
 // ---------------------------------------------------------------------------
 // Field map types
@@ -212,7 +217,7 @@ function applyFormat(format: string, fields: Record<string, string>): string {
 function buildOverlaySvg(
   w: number,
   h: number,
-  definition: TemplateDefinition,
+  layers: TemplateDefinition,
   fields: Record<string, string>,
   fontB64: string | null,
 ): string {
@@ -235,7 +240,7 @@ function buildOverlaySvg(
   const gradDefs: string[] = [];
 
   let gradIdx = 0;
-  for (const layer of definition.layers) {
+  for (const layer of layers) {
     if (layer.type === "photo") continue; // photo is the base image, not SVG
 
     if (layer.type === "scrim") {
@@ -360,9 +365,9 @@ export async function generateMarketingImage(
   );
 
   // 2. Build SVG overlay
-  const definition = template.definition as unknown as TemplateDefinition;
-  const fontB64    = getFontBase64();
-  const svgStr     = buildOverlaySvg(canvasW, canvasH, definition, fields, fontB64);
+  const layers  = template.definition as unknown as TemplateDefinition;
+  const fontB64 = getFontBase64();
+  const svgStr  = buildOverlaySvg(canvasW, canvasH, layers, fields, fontB64);
 
   // 3. Composite → full-size PNG
   const pngBuffer = await sharp!(cropped)

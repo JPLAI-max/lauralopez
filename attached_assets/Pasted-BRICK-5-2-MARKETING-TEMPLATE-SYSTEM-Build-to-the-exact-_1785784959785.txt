@@ -1,0 +1,189 @@
+BRICK 5.2 — MARKETING TEMPLATE SYSTEM
+
+Build to the exact measurements in section 3. Do not substitute
+your own layout judgment. These values come from an existing
+brand system and are not open to interpretation.
+
+Brand assets are not final. Render the brokerage wordmark from a
+placeholder for now — see section 9.
+
+────────────────────────────────────────
+1. SCHEMA — lib/db/src/schema/marketing.ts
+────────────────────────────────────────
+ownerId notNull indexed, officeId nullable. Every read/update/
+delete filters on ownerId. Match transactions.ts.
+
+marketing_templates
+  id, ownerId, officeId
+  key            text notNull          // "story.just_sold"
+  name           text notNull
+  channel        text notNull          // instagram_story | instagram_post
+  version        integer notNull default 1
+  canvasWidth    integer notNull
+  canvasHeight   integer notNull
+  definition     jsonb notNull         // layer array
+  requiredFields jsonb notNull         // string[]
+  photoAspect    numeric(6,4) notNull
+  isActive       boolean notNull default true
+  createdAt
+
+  unique on (key, version)
+
+Templates are DATA, not code. A new version is a new row — never
+mutate an existing version. campaign_assets records templateId
+AND version so approved assets stay reproducible.
+
+────────────────────────────────────────
+2. SLOT CONTRACT
+────────────────────────────────────────
+requiredFields for story.just_sold:
+  ["heroImage","headline","address","city","price",
+   "brokerageMark","roleLine","agentName"]
+
+Render FAILS with a clear error if any required field is null or
+empty. It must NOT render a blank space or silently drop a layer.
+
+────────────────────────────────────────
+3. STORY TEMPLATE — 1080 x 1920
+────────────────────────────────────────
+Positions as percentages of canvas height, centered
+horizontally. All text pure white (#FFFFFF). NO gold in story
+templates.
+
+LAYER 1 — photo
+  Cover-fit, cropped using the media row's focalX/focalY.
+
+LAYER 2 — top scrim (REQUIRED, not configurable off)
+  Linear gradient, black, 0% to 34% of height.
+  Opacity 0.32 at top -> 0 at bottom.
+  This is what lets the template survive photos without open sky
+  behind the headline. Do not omit or make optional.
+
+LAYER 3 — bottom scrim
+  Linear gradient, black, 78% to 100% of height.
+  Opacity 0 -> 0.42.
+
+LAYER 4 — headline block
+  headline  y 14.5%  72px  caps  tracking 0.02em  weight 300
+  rule      y 16.8%  120x1px white at 70% opacity, centered
+  address   y 19.0%  34px  caps  tracking 0.18em  weight 400
+  subline   y 21.5%  26px  caps  tracking 0.14em  weight 300
+            format: "{city} | LP {price}"  — pipe with spaces
+
+LAYER 5 — signature block
+  brokerageMark  y 88.5%  width 36% of canvas, centered
+  roleLine       y 91.5%  21px caps tracking 0.20em weight 300
+  agentName      y 94.0%  22px caps tracking 0.16em weight 400
+
+Typeface: the site's display serif at Light/300 for headline and
+subline, Regular/400 for address and name. Use Cormorant
+Garamond — already in the stack.
+
+Headline max 18 characters. If longer, reduce to 60px rather
+than wrapping. NEVER wrap the headline to two lines.
+
+────────────────────────────────────────
+4. VARIANTS — same geometry, different text
+────────────────────────────────────────
+  story.just_sold       "JUST SOLD"       subline city|LP price
+  story.just_listed     "JUST LISTED"     subline city|LP price
+  story.open_house      "OPEN TODAY {time}"  subline city only
+  story.price_improved  "PRICE IMPROVED"  subline city|LP price
+  story.in_escrow       "IN ESCROW"       subline city only
+
+roleLine: "LISTED BY" | "REPRESENTED BUYER" | "REPRESENTED
+SELLER" — set per campaign, never hardcoded.
+
+Build story.just_sold FIRST and completely. The other four are
+the same definition with different text once it renders.
+
+────────────────────────────────────────
+5. POST TEMPLATE — 1080 x 1080
+────────────────────────────────────────
+Same system compressed. Headline block 17-26%, signature 84-94%.
+Same scrims. Type scale reduced 12%. photoAspect 1:1.
+
+────────────────────────────────────────
+6. PHOTO SELECTION BY ASPECT
+────────────────────────────────────────
+Each template declares photoAspect. When generating, select from
+that property's gallery (property_media) the image whose
+aspectRatio is closest, falling back to heroMediaId. Reuse the
+matching logic from media/slot-suggestions — do not write a
+second implementation.
+
+Always crop using focalX/focalY. Never center-crop.
+
+────────────────────────────────────────
+7. RENDERING
+────────────────────────────────────────
+Render with sharp + SVG composite. No headless browser.
+
+Fonts must be embedded in the SVG or registered with sharp.
+Verify the rendered output actually uses Cormorant Garamond and
+has NOT silently fallen back to a system sans. Confirm this by
+looking at the output image, not by reading code.
+
+Output PNG at canvas dimensions, plus a WebP derivative.
+
+────────────────────────────────────────
+8. LICENSE DISCLOSURE
+────────────────────────────────────────
+For instagram_post and instagram_story, the DRE license number
+and brokerage name are required in the CAPTION, not burned into
+the image. Caption generation must append them and FAIL if the
+settings values are blank.
+
+For postcard, mailer, and email: required on the artifact itself.
+
+────────────────────────────────────────
+9. PLACEHOLDER BRAND ASSETS
+────────────────────────────────────────
+The real brokerage wordmark and any licensed typeface are not
+available yet.
+
+Store the wordmark as a setting (brand.wordmark_white) pointing
+at a media row. Until a real asset is uploaded, render a
+placeholder: the brokerage name as centered caps text at the
+specified width and position, so the composition is correct and
+only the asset swaps later.
+
+Do NOT hardcode the placeholder into the template definition.
+Swapping the setting to a real PNG must require no code change
+and must not alter any geometry.
+
+────────────────────────────────────────
+10. ADMIN PREVIEW
+────────────────────────────────────────
+Template picker in the campaign task view with live thumbnails
+rendered from that property's real data. Switching template
+re-renders. Nothing saves until approve.
+
+────────────────────────────────────────
+ACCEPTANCE
+────────────────────────────────────────
+1.  Render story.just_sold against one of the seeded top-pick
+    photos. Save the PNG to /docs/template-previews/
+    story-just-sold.png and COMMIT it.
+2.  Render the same template against a photo where the building
+    fills the upper third (no open sky). Save to
+    /docs/template-previews/story-just-sold-no-sky.png and
+    commit. The headline must remain legible via the scrim.
+3.  Render story.just_listed at 1080x1080 using the post
+    template. Save to /docs/template-previews/post-just-listed.png
+    and commit.
+4.  Missing price -> render FAILS with a clear error, does not
+    output with a gap.
+5.  Headline of 24 characters shrinks to 60px, does not wrap.
+    Save proof to /docs/template-previews/long-headline.png.
+6.  Off-center focalX/focalY visibly changes the crop. Save both
+    versions for comparison.
+7.  Rendered text uses Cormorant Garamond, not a system fallback.
+8.  Caption includes the license number; blank license setting
+    fails caption generation.
+9.  Creating version 2 of a template leaves already-approved
+    assets referencing version 1 unchanged.
+10. ownerId reference count in the new route file >= its query
+    count. Report the number.
+
+Commit every preview PNG. They are the deliverable for review.
