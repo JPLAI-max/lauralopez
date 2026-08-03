@@ -57,18 +57,22 @@ export async function apiFetch<T = unknown>(
   const isJson = ct.includes("application/json");
 
   if (!res.ok) {
-    // Non-JSON error bodies (e.g. HTML from a proxy / gateway) get a clear message
+    const method = ((rest as RequestInit).method ?? "GET").toUpperCase();
+    console.error(`[apiFetch] ${method} ${path} → ${res.status} (${ct || "no content-type"})`);
     if (!isJson) {
       throw new ApiError(
         res.status,
-        `API unreachable — expected JSON, received ${ct || "unknown content-type"}`,
+        `Expected JSON, received ${ct || "no content-type"} (${res.status})`,
       );
     }
-    let msg = res.statusText;
+    let msg = "";
     try {
       const data = await res.json();
-      msg = data?.error ?? msg;
+      const raw = (data as { error?: unknown })?.error;
+      if (typeof raw === "string" && raw.trim()) msg = raw.trim();
     } catch (_) {}
+    if (!msg && res.statusText) msg = res.statusText;
+    if (!msg) msg = `Request failed (${res.status})`;
     throw new ApiError(res.status, msg);
   }
 

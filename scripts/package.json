@@ -12,6 +12,7 @@
     "test-brick3": "tsx ./src/test-brick3.ts",
     "seed-content": "tsx ./src/seed-content.ts",
     "transfer-ownership": "tsx ./src/transfer-ownership.ts",
+    "reset-admin-password": "tsx ./src/reset-admin-password.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

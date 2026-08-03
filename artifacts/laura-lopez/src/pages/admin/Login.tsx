@@ -15,11 +15,13 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
   const [error, setError] = useState("");
+  const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setFailed(false);
     setLoading(true);
     try {
       const res = await authApi.login(email, password);
@@ -33,6 +35,7 @@ export default function AdminLogin() {
         setStep("totp");
       }
     } catch (err) {
+      setFailed(true);
       setError(err instanceof ApiError ? err.message : "Login failed");
     } finally {
       setLoading(false);
@@ -42,6 +45,7 @@ export default function AdminLogin() {
   async function handleTotp(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setFailed(false);
     setLoading(true);
     try {
       await authApi.verifyTotp(totpCode.replace(/\s/g, ""));
@@ -49,6 +53,7 @@ export default function AdminLogin() {
       await qc.invalidateQueries({ queryKey: ["admin-me"] });
       navigate("/admin");
     } catch (err) {
+      setFailed(true);
       setError(err instanceof ApiError ? err.message : "Invalid code");
       setTotpCode("");
     } finally {
@@ -103,7 +108,9 @@ export default function AdminLogin() {
                   className="w-full border border-white/30 bg-white/10 text-white placeholder-white/40 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/60"
                 />
               </div>
-              {error && <p className="text-xs text-red-300">{error}</p>}
+              {failed && (
+                <p className="text-xs text-red-300">{error || "Sign-in failed — please try again"}</p>
+              )}
               <button
                 type="submit"
                 disabled={loading}
@@ -137,7 +144,9 @@ export default function AdminLogin() {
                   placeholder="000000"
                 />
               </div>
-              {error && <p className="text-xs text-red-300">{error}</p>}
+              {failed && (
+                <p className="text-xs text-red-300">{error || "Verification failed — please try again"}</p>
+              )}
               <button
                 type="submit"
                 disabled={loading || totpCode.length < 6}

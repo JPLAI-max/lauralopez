@@ -14,6 +14,7 @@ export default function TotpSetup() {
   const [secret, setSecret] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
+  const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [copiedAll, setCopiedAll] = useState(false);
@@ -33,8 +34,8 @@ export default function TotpSetup() {
         if (err instanceof ApiError && err.status === 401) {
           navigate("/admin/login");
         } else {
-          const msg = err instanceof Error ? err.message : "Could not load setup — please try again";
-          setError(msg);
+          setFailed(true);
+          setError(err instanceof Error ? err.message : "Could not load setup — please try again");
         }
       });
   }, [navigate]);
@@ -46,10 +47,12 @@ export default function TotpSetup() {
     try {
       const res = await authApi.totpConfirm(code.replace(/\s/g, ""));
       clearPendingToken(); // session cookie now active; pending token no longer needed
+      setFailed(false);
       setRecoveryCodes(res.recoveryCodes);
       await qc.invalidateQueries({ queryKey: ["admin-me"] });
       setStep("recovery");
     } catch (err) {
+      setFailed(true);
       setError(err instanceof ApiError ? err.message : "Invalid code — try again");
       setCode("");
     } finally {
@@ -167,7 +170,9 @@ export default function TotpSetup() {
               className="w-full border border-border bg-background px-3 py-2 text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="000000"
             />
-            {error && <p className="text-xs text-destructive">{error}</p>}
+            {failed && (
+              <p className="text-xs text-destructive">{error || "Confirmation failed — please try again"}</p>
+            )}
             <button
               type="submit"
               disabled={loading || code.length < 6}
