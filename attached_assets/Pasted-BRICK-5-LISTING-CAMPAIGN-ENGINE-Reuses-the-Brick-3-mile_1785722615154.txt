@@ -1,0 +1,208 @@
+BRICK 5 — LISTING CAMPAIGN ENGINE
+
+Reuses the Brick 3 milestone pattern. Do NOT build a second date
+engine — import computeMilestoneDate from lib/dates.ts.
+
+Every table gets ownerId (notNull, indexed) and officeId
+(nullable). Every read/update/delete filters on ownerId. Match
+the transactions.ts pattern exactly — this was a regression in
+Brick 4 and must not recur.
+
+────────────────────────────────────────
+1. SCHEMA — lib/db/src/schema/campaigns.ts
+────────────────────────────────────────
+campaign_templates
+  id, ownerId, officeId, name, trigger, isDefault, createdAt
+  trigger: new_listing | price_change | open_house | sold
+
+campaign_template_items
+  id, templateId cascade
+  label            text notNull
+  channel          text notNull
+                   // instagram_post | instagram_story | email |
+                   // postcard | mailer | voicemail | manual
+  offsetDays       integer notNull      // from listing go-live
+  dayType          text notNull         // calendar | business
+  assetType        text nullable
+                   // image_1x1 | image_9x16 | email_html |
+                   // print_pdf | script_txt | null
+  sortOrder        integer
+
+campaigns
+  id, ownerId, officeId
+  propertyId       uuid notNull -> properties.id
+  templateId       uuid nullable
+  trigger          text notNull
+  anchorDate       date notNull         // go-live date
+  status           text notNull default 'active'
+                   // active | complete | cancelled
+  createdAt, completedAt
+
+campaign_tasks
+  id, campaignId cascade, ownerId
+  label, channel, assetType
+  computedDate     date nullable
+  overrideDate     date nullable
+  status           text notNull default 'pending'
+                   // pending | ready | done | skipped
+  assetId          uuid nullable -> campaign_assets.id
+  notes            text nullable
+  completedAt, sortOrder
+
+campaign_assets
+  id, ownerId, campaignId, taskId
+  assetType        text notNull
+  storageKey       text nullable        // R2, for images/PDFs
+  textContent      text nullable        // captions, scripts, copy
+  status           text notNull default 'draft'
+                   // draft | approved | rejected
+  approvedAt, approvedBy
+  createdAt
+
+campaign_events   -- APPEND ONLY, same purpose as Brick 3
+  id, campaignId, ownerId, actor, action, payload jsonb, createdAt
+
+────────────────────────────────────────
+2. TRIGGER
+────────────────────────────────────────
+When a property's status changes to 'listed', OFFER to spawn a
+campaign — do not auto-spawn. Show the computed task list as a
+preview with dates editable inline. Nothing writes until confirm.
+Same pattern as transaction creation.
+
+A property can have multiple campaigns over its life (listed,
+price change, sold). Do not overwrite.
+
+────────────────────────────────────────
+3. ASSET GENERATION
+────────────────────────────────────────
+Images — reuse the Brick 4 media pipeline and sharp:
+  image_1x1   1080x1080  from property heroMediaId
+  image_9x16  1080x1920  from the same source
+
+  Crop using the media row's focalX/focalY. NEVER center-crop a
+  property photo — that is how you decapitate a house.
+
+  Overlay: address, price, and Laura's name/title in the locked
+  brand palette. Render text with sharp's SVG composite, not a
+  headless browser.
+
+Copy — generated via the Anthropic API:
+  Caption for instagram_post and instagram_story
+  Subject + body for email
+  Headline + body for postcard and mailer
+  Script for voicemail
+
+  HARD RULE: the model receives property facts as structured
+  input and must not invent any number, date, or claim. Price,
+  beds, baths, sqft, lot size, year built, and address come from
+  the properties row and are inserted programmatically AFTER
+  generation, via placeholder substitution — not written by the
+  model. Prompt the model to write around {{price}}, {{address}}
+  etc. and reject any draft containing a digit outside a
+  placeholder.
+
+  Every generated asset lands as status 'draft'. Nothing is ever
+  auto-approved.
+
+Print — postcard and mailer produce a print-ready PDF:
+  6x9 at 300dpi with 0.125" bleed, CMYK-safe colors.
+  Use the pdf generation approach already in the stack.
+
+────────────────────────────────────────
+4. DRE ADVERTISING COMPLIANCE
+────────────────────────────────────────
+EVERY generated asset — image overlay, email footer, postcard,
+mailer — must include Laura's DRE license number and the
+brokerage name. Store both as settings values, not hardcoded.
+
+Implement as a required composite step in the generator, not as
+a template variable someone can delete. An asset missing either
+field must fail generation with a clear error rather than
+render.
+
+If a property has isLauraListing false, the listing brokerage
+must also appear.
+
+────────────────────────────────────────
+5. CHANNEL DELIVERY
+────────────────────────────────────────
+email       Send via Resend to a named list. Requires the domain
+            (deferred). Until configured, the task generates the
+            HTML and offers a copy/download — it does not send.
+
+instagram   Phase 1 is EXPORT ONLY. Generate the image and
+            caption, provide a download and copy-caption button.
+            Do NOT build Graph API publishing yet — it requires a
+            Business account and Meta app review. Structure the
+            task so a publish adapter can drop in later.
+
+postcard    Download PDF. No printer API.
+mailer      Download PDF.
+
+voicemail   Generate the script text and a CSV of the target
+            list ONLY. Provide download. Build NO sending
+            integration and NO vendor API.
+
+            Display this above the task, as a component constant:
+            "Ringless voicemail is treated as a call under the
+             TCPA and requires prior express consent. Confirm
+             compliance with brokerage counsel before use."
+
+────────────────────────────────────────
+6. UI — /admin/campaigns
+────────────────────────────────────────
+List: property address, trigger, anchor date, tasks
+done/total, next due date.
+
+Detail: task timeline identical in structure to the transaction
+milestone view. Each task row shows channel icon, label, date,
+status, and an asset preview thumbnail when generated.
+
+Task detail: generated asset preview, editable copy, regenerate
+button, approve/reject, download or send action per channel.
+
+Approve is always an explicit click. There is no bulk approve.
+
+Dense layout, same palette, usable at 375px.
+
+────────────────────────────────────────
+7. SEED — scripts/src/seed-campaigns.ts
+────────────────────────────────────────
+One default template, trigger new_listing, idempotent:
+
+  Day 0   instagram_post    image_1x1
+  Day 0   instagram_story   image_9x16
+  Day 1   email             email_html
+  Day 2   postcard          print_pdf   (immediate neighbors)
+  Day 5   instagram_story   image_9x16  (second angle)
+  Day 7   mailer            print_pdf   (wider farm)
+  Day 10  manual            null        (follow-up calls)
+
+Voicemail is NOT in the default template. It can be added
+manually per campaign.
+
+────────────────────────────────────────
+ACCEPTANCE
+────────────────────────────────────────
+1.  typecheck clean.
+2.  ownerId reference count per new route file is >= its query
+    count. Report the numbers.
+3.  Property set to 'listed' offers a campaign, does not
+    auto-create one.
+4.  Task dates compute from the anchor using lib/dates.ts.
+5.  Generated 1x1 and 9x16 images respect the source media's
+    focal point — verify with an off-center focal point that the
+    subject is not cropped out.
+6.  A generated caption containing a raw price digit outside a
+    placeholder is REJECTED by the generator.
+7.  An asset generated with the DRE license setting blank FAILS
+    with a clear error rather than rendering without it.
+8.  Postcard PDF opens at 6x9 with correct bleed.
+9.  Voicemail task produces script + CSV and offers NO send
+    action anywhere in the UI.
+10. Every asset starts as draft; no path auto-approves.
+11. Campaign events log before/after on any date change.
+12. Campaigns admin usable at 375px.
+
+Report each with evidence.
