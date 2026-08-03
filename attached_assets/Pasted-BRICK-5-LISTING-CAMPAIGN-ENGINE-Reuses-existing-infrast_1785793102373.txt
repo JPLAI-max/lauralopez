@@ -1,0 +1,246 @@
+BRICK 5 — LISTING CAMPAIGN ENGINE
+
+Reuses existing infrastructure. Do NOT build a second date
+engine, a second aspect-matcher, or a second render path.
+  dates      -> import computeMilestoneDate from lib/dates.ts
+  templates  -> marketing_templates rows via the 5.2 renderer
+  photos     -> the media/slot-suggestions matching logic
+  recipients -> contacts where subscribedIntelligence is true
+
+ownerId notNull indexed, officeId nullable, on every table.
+Every read/update/delete filters on ownerId. Match
+transactions.ts. Report reference counts at the end.
+
+────────────────────────────────────────
+1. SCHEMA — lib/db/src/schema/campaigns.ts
+────────────────────────────────────────
+campaign_templates
+  id, ownerId, officeId, name, trigger, isDefault, createdAt
+  trigger: new_listing | price_change | open_house | sold
+
+campaign_template_items
+  id, templateId cascade
+  label            text notNull
+  channel          text notNull
+                   // instagram_post | instagram_story | email |
+                   // postcard | mailer | voicemail | manual
+  offsetDays       integer notNull
+  dayType          text notNull        // calendar | business
+  marketingKey     text nullable       // "story.just_sold"
+  assetType        text nullable
+                   // image_1x1 | image_9x16 | email_html |
+                   // print_pdf | script_txt | null
+  sortOrder        integer
+
+campaigns
+  id, ownerId, officeId
+  propertyId       uuid notNull -> properties.id
+  templateId       uuid nullable
+  trigger          text notNull
+  anchorDate       date notNull
+  roleLine         text notNull default 'LISTED BY'
+                   // LISTED BY | REPRESENTED BUYER |
+                   // REPRESENTED SELLER
+  status           text notNull default 'active'
+  createdAt, completedAt
+
+campaign_tasks
+  id, campaignId cascade, ownerId
+  label, channel, assetType, marketingKey
+  computedDate     date nullable
+  overrideDate     date nullable
+  status           text notNull default 'pending'
+                   // pending | ready | done | skipped
+  assetId          uuid nullable -> campaign_assets.id
+  notes            text nullable
+  completedAt, sortOrder
+
+campaign_assets
+  id, ownerId, campaignId, taskId
+  assetType        text notNull
+  templateId       uuid nullable -> marketing_templates.id
+  templateVersion  integer nullable
+  storageKey       text nullable
+  textContent      text nullable      // caption, subject, body
+  status           text notNull default 'draft'
+                   // draft | approved | rejected
+  approvedAt, approvedBy, createdAt
+
+  Recording templateId AND templateVersion is required so an
+  approved asset stays reproducible after a template is revised.
+
+campaign_events   -- APPEND ONLY
+  id, campaignId, ownerId, actor, action, payload jsonb, createdAt
+  Capture before/after values, not just the new value.
+
+────────────────────────────────────────
+2. TRIGGER
+────────────────────────────────────────
+When a property's status changes to 'listed' (or 'sold'), OFFER
+to spawn a campaign. Do NOT auto-spawn.
+
+Show the computed task list as a preview with dates editable
+inline. Nothing writes until confirm. Same pattern as
+transaction creation.
+
+A property may have multiple campaigns over its life. Never
+overwrite an existing one.
+
+────────────────────────────────────────
+3. IMAGE ASSETS — call the 5.2 renderer
+────────────────────────────────────────
+Tasks with a marketingKey render through the existing template
+system. Look up the active marketing_templates row by key, pass
+the property's field values, store the returned PNG in R2, and
+record templateId + templateVersion on the asset.
+
+Do NOT construct layouts in campaign code. Do NOT re-implement
+fit-to-width, scrims, or focal cropping. If a template needs a
+change, it changes in marketing_templates.
+
+Field mapping from the property row:
+  headline    from the template variant
+  address     street line only — everything before the first
+              comma in properties.address
+  city        properties.neighborhood, else the segment after
+              the first comma
+  price       soldPrice for sold triggers, else listPrice,
+              formatted "$X,XXX,XXX"
+  roleLine    campaigns.roleLine
+  agentName   from settings
+  heroImage   aspect-matched from property_media
+
+If a required field is null, the task shows a clear "Cannot
+generate — missing {field}" state. It must not render a partial
+asset.
+
+────────────────────────────────────────
+4. COPY GENERATION — Anthropic API
+────────────────────────────────────────
+Generate caption, email subject and body, postcard headline and
+body, and voicemail script.
+
+HARD RULE — the model never writes a number:
+  - Supply property facts as structured input.
+  - Instruct the model to write around placeholders:
+    {{price}}, {{address}}, {{beds}}, {{baths}}, {{sqft}},
+    {{lotSqft}}, {{yearBuilt}}, {{city}}.
+  - REJECT any draft containing a digit outside a placeholder.
+    Retry once, then surface the failure. Do not silently strip
+    digits.
+  - Substitute real values programmatically AFTER generation.
+
+Voice: match the advisory positioning — restrained, specific,
+no exclamation marks, no "stunning" or "dream home". Use the
+property's commentary field as tone reference when present.
+
+Every generated asset lands as status 'draft'. Nothing is ever
+auto-approved. There is no bulk approve.
+
+────────────────────────────────────────
+5. DRE DISCLOSURE
+────────────────────────────────────────
+Settings values, not hardcoded: dre_license_number,
+brokerage_name, agent_name.
+
+  instagram_post / instagram_story -> appended to the CAPTION.
+  email / postcard / mailer        -> on the artifact itself.
+
+Caption or artifact generation FAILS with a clear error if
+dre_license_number or brokerage_name is blank. Implement as a
+required composite step, not a template variable that can be
+deleted.
+
+When the property has isLauraListing false, the listing
+brokerage must also appear.
+
+────────────────────────────────────────
+6. CHANNEL DELIVERY
+────────────────────────────────────────
+instagram  EXPORT ONLY. Download image + copy caption. Build no
+           Graph API publishing. Structure the task so a publish
+           adapter drops in later.
+
+email      Recipients are contacts where subscribedIntelligence
+           is true AND unsubscribedAt is null AND archived is
+           false. Show the live recipient count before sending.
+           Until the sending domain is configured, generate the
+           HTML and offer download/copy — do NOT send.
+           Every email includes an unsubscribe link and a
+           physical address (settings value).
+
+postcard   6x9 at 300dpi, 0.125" bleed, CMYK-safe. Download PDF.
+mailer     Same. Download PDF.
+
+voicemail  Generate script text and a CSV of the target list
+           ONLY. Download only. Build NO sending integration and
+           NO vendor API.
+
+           Display above the task, as a component constant:
+           "Ringless voicemail is treated as a call under the
+            TCPA and requires prior express consent. Confirm
+            compliance with brokerage counsel before use."
+
+────────────────────────────────────────
+7. UI — replace the Campaigns stub
+────────────────────────────────────────
+List: property address, trigger, anchor date, tasks done/total,
+next due date, overdue count.
+
+Detail: task timeline matching the transaction milestone view.
+Each row shows channel icon, label, date, status, asset
+thumbnail when generated.
+
+Task detail: asset preview, editable copy, regenerate,
+approve/reject, download or send per channel.
+
+Dense layout. Usable at 375px — timeline stacks to cards below
+md.
+
+────────────────────────────────────────
+8. SEED — scripts/src/seed-campaigns.ts
+────────────────────────────────────────
+Idempotent. One default template, trigger new_listing:
+
+  Day 0   instagram_post    story.just_listed  image_1x1
+  Day 0   instagram_story   story.just_listed  image_9x16
+  Day 1   email             —                  email_html
+  Day 2   postcard          —                  print_pdf
+  Day 5   instagram_story   story.just_listed  image_9x16
+  Day 7   mailer            —                  print_pdf
+  Day 10  manual            —                  null
+
+Second template, trigger sold, using story.just_sold.
+
+Voicemail is NOT in any default template. It is added manually
+per campaign.
+
+────────────────────────────────────────
+ACCEPTANCE
+────────────────────────────────────────
+1.  typecheck clean.
+2.  ownerId reference count per new route file >= its query
+    count. Report numbers.
+3.  Setting a property to 'listed' OFFERS a campaign, does not
+    auto-create.
+4.  Task dates compute via lib/dates.ts from the anchor.
+5.  Image task renders through the 5.2 renderer and records
+    templateId + templateVersion. Commit one generated asset to
+    /docs/campaign-previews/ for review.
+6.  A caption draft containing a raw price digit outside a
+    placeholder is REJECTED. Show the rejection.
+7.  Blank dre_license_number -> generation FAILS with a clear
+    error, does not produce an asset without it.
+8.  Property missing listPrice -> task shows "Cannot generate —
+    missing price", renders nothing.
+9.  Email task shows the correct live recipient count from
+    contacts.
+10. Postcard PDF opens at 6x9 with correct bleed.
+11. Voicemail task produces script + CSV and offers NO send
+    action anywhere in the UI.
+12. Every asset starts draft; no path auto-approves.
+13. Revising a template to version 2 leaves an approved asset
+    still referencing version 1.
+14. Campaigns usable at 375px.
+
+Report each with evidence.

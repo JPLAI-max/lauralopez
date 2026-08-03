@@ -106,6 +106,7 @@ export const campaignsTable = pgTable(
     templateId:  uuid("template_id"),
     trigger:     text("trigger").notNull(),
     anchorDate:  date("anchor_date", { mode: "string" }).notNull(),
+    roleLine:    text("role_line").notNull().default("LISTED BY"), // LISTED BY | REPRESENTED BUYER | REPRESENTED SELLER
     status:      text("status").notNull().default("active"), // active | complete | cancelled
     createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp("completed_at", { withTimezone: true }),

@@ -4,9 +4,9 @@ import {
   campaignsTable, campaignTasksTable, campaignEventsTable, campaignAssetsTable,
   campaignTemplatesTable, campaignTemplateItemsTable,
   propertiesTable, mediaTable, propertyMediaTable,
-  settingsTable, marketingTemplatesTable,
+  settingsTable, marketingTemplatesTable, contactsTable,
 } from "@workspace/db";
-import { eq, and, asc, desc, inArray, isNull, or } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, isNull, or, count as sqlCount } from "drizzle-orm";
 import { z } from "zod";
 import { computeMilestoneDate } from "../../lib/dates";
 import { logger } from "../../lib/logger";
@@ -90,6 +90,17 @@ function effectiveDate(task: { computedDate: string | null; overrideDate: string
   return task.overrideDate ?? task.computedDate;
 }
 
+/**
+ * Format a raw price string (e.g. "2500000") as "$2,500,000".
+ * Returns null when the input is null/empty/non-numeric.
+ */
+function formatPrice(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const n = parseFloat(raw);
+  if (!isFinite(n)) return raw;
+  return "$" + Math.round(n).toLocaleString("en-US");
+}
+
 // ---------------------------------------------------------------------------
 // POST /admin/campaigns/preview — compute tasks without saving
 // ---------------------------------------------------------------------------
@@ -150,6 +161,26 @@ router.post("/campaigns/preview", async (req: Request, res: Response): Promise<v
     anchorDate,
     tasks,
   });
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/campaigns/recipient-count
+// Returns the number of contacts eligible to receive campaign emails:
+//   subscribedIntelligence = true AND unsubscribedAt IS NULL AND archived = false
+// Must be declared BEFORE /campaigns/:id to avoid /:id matching this path.
+// ---------------------------------------------------------------------------
+router.get("/campaigns/recipient-count", async (req: Request, res: Response): Promise<void> => {
+  const ownerId = req.user!.id;
+  const rows = await db
+    .select({ n: sqlCount() })
+    .from(contactsTable)
+    .where(and(
+      eq(contactsTable.ownerId,                ownerId),
+      eq(contactsTable.subscribedIntelligence, true),
+      isNull(contactsTable.unsubscribedAt),
+      eq(contactsTable.archived,               false),
+    ));
+  res.json({ count: Number(rows[0]?.n ?? 0) });
 });
 
 // ---------------------------------------------------------------------------
@@ -516,7 +547,13 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
     if (rows[0]?.value) agentName = rows[0].value;
   } catch { /* ignore */ }
 
-  const priceStr  = property.listPrice ?? property.soldPrice ?? null;
+  // Use soldPrice for sold trigger, listPrice for everything else.
+  // Fall back to the other value when the preferred one is null.
+  const rawPrice  = campaign.trigger === "sold"
+    ? (property.soldPrice ?? property.listPrice)
+    : (property.listPrice ?? property.soldPrice);
+  const priceStr  = formatPrice(rawPrice);
+
   const facts = {
     address:    property.address,
     price:      priceStr,
@@ -662,7 +699,7 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
           address:       extractStreet(property.address),
           city,
           price:         priceStr ?? "",
-          roleLine:      "LISTED BY",
+          roleLine:      campaign.roleLine,
           agentName,
           brokerageMark: brokerageName,
         };

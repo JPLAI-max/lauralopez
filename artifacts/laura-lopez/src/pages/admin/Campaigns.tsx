@@ -254,6 +254,16 @@ function TaskDetail({
     queryFn:  () => campaignApi.get(campaignId),
   });
 
+  // Recipient count — only fetched when the task is an email task
+  // (resolved after data loads so we know task.channel)
+  const taskChannel = (data?.tasks as CampaignTask[] | undefined)?.find((t) => t.id === taskId)?.channel;
+  const { data: rcData } = useQuery({
+    queryKey: ["campaign-recipient-count"],
+    queryFn:  () => campaignApi.recipientCount(),
+    enabled:  taskChannel === "email",
+    staleTime: 60_000,
+  });
+
   const generate = useMutation({
     mutationFn: () => campaignApi.tasks.generate(
       taskId,
@@ -389,6 +399,16 @@ function TaskDetail({
         {!asset && (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">No asset generated yet.</p>
+
+            {/* Email: show live recipient count before generating */}
+            {task.channel === "email" && (
+              <p className="text-xs text-muted-foreground">
+                Recipients (subscribed, not unsubscribed):{" "}
+                <span className="font-semibold text-foreground">
+                  {rcData !== undefined ? rcData.count : "—"}
+                </span>
+              </p>
+            )}
 
             {/* Template picker for instagram channels */}
             {isInstagram && data.property?.id && (

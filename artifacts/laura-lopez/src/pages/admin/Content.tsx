@@ -11,6 +11,7 @@ import {
   type SlotSuggestion,
   type CampaignTemplate,
   type CampaignPreviewTask,
+  type CampaignTrigger,
 } from "../../lib/admin-api";
 import { ApiError } from "../../lib/admin-api";
 
@@ -309,13 +310,29 @@ function ArticlesTab() {
 // ============================================================================
 // CAMPAIGN OFFER MODAL
 // ============================================================================
+const TRIGGER_LABEL: Record<CampaignTrigger, string> = {
+  new_listing:  "Listing",
+  sold:         "Just Sold",
+  price_change: "Price Change",
+  open_house:   "Open House",
+};
+
+const ANCHOR_LABEL: Record<CampaignTrigger, string> = {
+  new_listing:  "Anchor date (listing date)",
+  sold:         "Anchor date (close / sold date)",
+  price_change: "Anchor date (price change date)",
+  open_house:   "Anchor date (open house date)",
+};
+
 function CampaignOfferModal({
   propertyId,
   propertyAddress,
+  trigger,
   onDone,
 }: {
   propertyId:      string;
   propertyAddress: string;
+  trigger:         CampaignTrigger;
   onDone:          () => void;
 }) {
   const today       = new Date().toISOString().slice(0, 10);
@@ -330,10 +347,12 @@ function CampaignOfferModal({
   useEffect(() => {
     campaignApi.templates.list().then((r) => {
       setTemplates(r.templates);
-      const def = r.templates.find((t) => t.isDefault && t.trigger === "new_listing") ?? r.templates.find((t) => t.trigger === "new_listing");
+      // Auto-select the default template matching this trigger
+      const def = r.templates.find((t) => t.isDefault && t.trigger === trigger)
+                ?? r.templates.find((t) => t.trigger === trigger);
       if (def) setTemplateId(def.id);
     }).catch(() => {});
-  }, []);
+  }, [trigger]);
 
   useEffect(() => {
     if (!templateId || !anchorDate) return;
@@ -348,30 +367,32 @@ function CampaignOfferModal({
     if (!templateId) return;
     setCreating(true); setError("");
     try {
-      await campaignApi.create({ propertyId, templateId, anchorDate, trigger: "new_listing" });
+      await campaignApi.create({ propertyId, templateId, anchorDate, trigger });
       onDone();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to create campaign.");
     } finally { setCreating(false); }
   }
 
+  const triggerTemplates = templates.filter((t) => t.trigger === trigger);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-background border border-border w-full max-w-sm max-h-[90vh] overflow-y-auto p-5 space-y-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold">Start Listing Campaign?</h3>
+            <h3 className="text-sm font-semibold">Start {TRIGGER_LABEL[trigger]} Campaign?</h3>
             <p className="text-xs text-muted-foreground mt-0.5 truncate">{propertyAddress}</p>
           </div>
           <button onClick={onDone} className="text-muted-foreground hover:text-foreground">✕</button>
         </div>
 
-        {templates.length > 1 && (
+        {triggerTemplates.length > 1 && (
           <div>
             <label className="block font-sans text-xs text-muted-foreground mb-1">Template</label>
             <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}
               className="w-full border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary">
-              {templates.filter((t) => t.trigger === "new_listing").map((t) => (
+              {triggerTemplates.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
@@ -379,7 +400,7 @@ function CampaignOfferModal({
         )}
 
         <div>
-          <label className="block font-sans text-xs text-muted-foreground mb-1">Anchor Date (listing date)</label>
+          <label className="block font-sans text-xs text-muted-foreground mb-1">{ANCHOR_LABEL[trigger]}</label>
           <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)}
             className="w-full border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
         </div>
@@ -432,8 +453,12 @@ function PropertiesTab() {
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  // Campaign offer
-  const [campaignOffer, setCampaignOffer] = useState<{ propertyId: string; propertyAddress: string } | null>(null);
+  // Campaign offer (null = no pending offer)
+  const [campaignOffer, setCampaignOffer] = useState<{
+    propertyId:      string;
+    propertyAddress: string;
+    trigger:         CampaignTrigger;
+  } | null>(null);
 
   // Form fields
   const [addr, setAddr] = useState(""); const [nbhd, setNbhd] = useState("");
@@ -499,7 +524,7 @@ function PropertiesTab() {
         architectureNotes: archNotes || null, lotNotes: lotNotes || null, valueNotes: valueNotes || null,
         featured, sortOrder: parseInt(sortOrder) || 0, archived,
       };
-      const wasNotListed = creating || (editing && editing.status !== "listed");
+      const prevStatus = creating ? null : editing?.status ?? null;
       let savedId: string | undefined;
       if (creating) {
         const res = await contentApi.properties.create(body);
@@ -509,14 +534,21 @@ function PropertiesTab() {
         savedId = editing.id;
       }
       loadProps(); close();
-      // Offer campaign when status is now "listed" and it wasn't before
-      if (propStatus === "listed" && wasNotListed && savedId) {
-        // Only offer if no active new_listing campaign exists for this property
+
+      // Offer a campaign when status just changed to "listed" or "sold" for the
+      // first time (no active campaign for this property+trigger already exists).
+      const statusJustChanged = (target: string) =>
+        propStatus === target && prevStatus !== target && !!savedId;
+
+      if (statusJustChanged("listed") || statusJustChanged("sold")) {
+        const offerTrigger: CampaignTrigger = propStatus === "sold" ? "sold" : "new_listing";
         const { campaigns } = await campaignApi.list();
         const existing = campaigns.find(
-          (c) => c.propertyId === savedId && c.trigger === "new_listing" && c.status !== "cancelled",
+          (c) => c.propertyId === savedId && c.trigger === offerTrigger && c.status !== "cancelled",
         );
-        if (!existing) setCampaignOffer({ propertyId: savedId, propertyAddress: addr });
+        if (!existing) {
+          setCampaignOffer({ propertyId: savedId!, propertyAddress: addr, trigger: offerTrigger });
+        }
       }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Save failed.");
@@ -662,6 +694,7 @@ function PropertiesTab() {
         <CampaignOfferModal
           propertyId={campaignOffer.propertyId}
           propertyAddress={campaignOffer.propertyAddress}
+          trigger={campaignOffer.trigger}
           onDone={() => setCampaignOffer(null)}
         />
       )}

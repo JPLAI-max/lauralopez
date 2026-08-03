@@ -872,6 +872,9 @@ export const campaignApi = {
   events: (id: string) =>
     apiFetch<{ events: unknown[] }>(`/admin/campaigns/${id}/events`),
 
+  recipientCount: () =>
+    apiFetch<{ count: number }>("/admin/campaigns/recipient-count"),
+
   tasks: {
     patch: (taskId: string, body: { overrideDate?: string | null; status?: TaskStatus; notes?: string | null }) =>
       apiFetch<{ task: CampaignTask }>(`/admin/campaign-tasks/${taskId}`, { method: "PATCH", json: body }),
