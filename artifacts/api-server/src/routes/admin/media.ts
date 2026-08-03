@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { randomBytes } from "node:crypto";
-import { db, mediaTable, imageSlotsTable, slotAssignmentsTable } from "@workspace/db";
-import { eq, and, isNull, sql, desc } from "drizzle-orm";
+import { db, mediaTable, imageSlotsTable } from "@workspace/db";
+import { eq, and, isNull, desc } from "drizzle-orm";
 import { z } from "zod";
 import { logger } from "../../lib/logger";
 import {
@@ -27,7 +27,7 @@ try {
 const router: IRouter = Router();
 
 const DERIVATIVE_WIDTHS = [480, 960, 1440, 2400];
-const MAX_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
+const MAX_SIZE_BYTES    = 25 * 1024 * 1024; // 25 MB
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
   "image/jpg",
@@ -41,7 +41,7 @@ const ALLOWED_MIME_TYPES = [
 // Helpers
 // ---------------------------------------------------------------------------
 function mediaResponse(m: typeof mediaTable.$inferSelect) {
-  const cfg_base = isConfigured();
+  const cfg_base      = isConfigured();
   const derivativeKeys = m.derivatives as Record<string, string>;
   const derivatives: Record<string, string> = {};
   for (const [w, key] of Object.entries(derivativeKeys)) {
@@ -55,12 +55,14 @@ function mediaResponse(m: typeof mediaTable.$inferSelect) {
 }
 
 // ---------------------------------------------------------------------------
-// GET /admin/media
+// GET /admin/media  — owner-scoped list
 // ---------------------------------------------------------------------------
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
+  const ownerId = req.user!.id;
   const items = await db
     .select()
     .from(mediaTable)
+    .where(eq(mediaTable.ownerId, ownerId))
     .orderBy(desc(mediaTable.createdAt))
     .limit(200);
   res.json({ media: items.map(mediaResponse) });
@@ -70,8 +72,8 @@ router.get("/", async (_req: Request, res: Response) => {
 // POST /admin/media/presign
 // ---------------------------------------------------------------------------
 const PresignBody = z.object({
-  filename: z.string().min(1).max(255),
-  mimeType: z.string(),
+  filename:  z.string().min(1).max(255),
+  mimeType:  z.string(),
   sizeBytes: z.number().int().positive(),
 });
 
@@ -97,9 +99,9 @@ router.post("/presign", async (req: Request, res: Response) => {
     return;
   }
 
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "bin";
+  const ext        = filename.split(".").pop()?.toLowerCase() ?? "bin";
   const storageKey = `uploads/${randomBytes(16).toString("hex")}.${ext}`;
-  const uploadUrl = await getPresignedPutUrl(storageKey, mimeType, sizeBytes);
+  const uploadUrl  = await getPresignedPutUrl(storageKey, mimeType, sizeBytes);
 
   res.json({ uploadUrl, storageKey });
 });
@@ -109,8 +111,8 @@ router.post("/presign", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 const CompleteBody = z.object({
   storageKey: z.string().min(1),
-  filename: z.string().min(1),
-  mimeType: z.string(),
+  filename:   z.string().min(1),
+  mimeType:   z.string(),
 });
 
 router.post("/complete", async (req: Request, res: Response) => {
@@ -129,6 +131,7 @@ router.post("/complete", async (req: Request, res: Response) => {
     return;
   }
   const { storageKey, filename, mimeType } = parsed.data;
+  const ownerId = req.user!.id;
 
   // Fetch the uploaded object
   let rawBuffer: Buffer;
@@ -146,7 +149,7 @@ router.post("/complete", async (req: Request, res: Response) => {
   try {
     const meta = await sharp!(rawBuffer).metadata();
     if (!meta.width || !meta.height) throw new Error("no dimensions");
-    width = meta.width;
+    width  = meta.width;
     height = meta.height;
   } catch (err) {
     logger.error({ err, storageKey }, "sharp failed to read dimensions");
@@ -164,20 +167,13 @@ router.post("/complete", async (req: Request, res: Response) => {
     if (targetWidth > width) continue; // skip upscale
     const derivKey = `${basePath}-${targetWidth}w.webp`;
     try {
-      const buf = await sharp!(rawBuffer)
-        .resize(targetWidth)
-        .webp()
-        .toBuffer();
+      const buf = await sharp!(rawBuffer).resize(targetWidth).webp().toBuffer();
       await putObject(derivKey, buf, "image/webp");
       derivatives[String(targetWidth)] = derivKey;
     } catch (err) {
       logger.warn({ err, derivKey }, "derivative generation failed — skipping width");
     }
   }
-
-  // Insert media row
-  const user = (req as Request & { user?: { id: string } }).user;
-  const ownerId = user?.id ?? "00000000-0000-0000-0000-000000000000";
 
   const sizeBytes = rawBuffer.length;
 
@@ -200,14 +196,16 @@ router.post("/complete", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /admin/media/:id
+// GET /admin/media/:id  — owner-scoped
 // ---------------------------------------------------------------------------
 router.get("/:id", async (req: Request, res: Response) => {
-  const id = req.params["id"] as string;
+  const id      = req.params["id"] as string;
+  const ownerId = req.user!.id;
+
   const [media] = await db
     .select()
     .from(mediaTable)
-    .where(eq(mediaTable.id, id));
+    .where(and(eq(mediaTable.id, id), eq(mediaTable.ownerId, ownerId)));
   if (!media) {
     res.status(404).json({ error: "Media not found." });
     return;
@@ -216,27 +214,29 @@ router.get("/:id", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// PATCH /admin/media/:id  — update focal point, altText, credit
+// PATCH /admin/media/:id  — owner-scoped; update focal point, altText, credit
 // ---------------------------------------------------------------------------
 const PatchMediaBody = z.object({
-  focalX: z.number().min(0).max(1).optional(),
-  focalY: z.number().min(0).max(1).optional(),
+  focalX:  z.number().min(0).max(1).optional(),
+  focalY:  z.number().min(0).max(1).optional(),
   altText: z.string().nullable().optional(),
-  credit: z.string().nullable().optional(),
+  credit:  z.string().nullable().optional(),
 });
 
 router.patch("/:id", async (req: Request, res: Response) => {
-  const id = req.params["id"] as string;
+  const id      = req.params["id"] as string;
+  const ownerId = req.user!.id;
+
   const parsed = PatchMediaBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid body" });
     return;
   }
   const updates: Partial<typeof mediaTable.$inferInsert> = {};
-  if (parsed.data.focalX !== undefined) updates.focalX = parsed.data.focalX.toFixed(3);
-  if (parsed.data.focalY !== undefined) updates.focalY = parsed.data.focalY.toFixed(3);
+  if (parsed.data.focalX  !== undefined) updates.focalX  = parsed.data.focalX.toFixed(3);
+  if (parsed.data.focalY  !== undefined) updates.focalY  = parsed.data.focalY.toFixed(3);
   if (parsed.data.altText !== undefined) updates.altText = parsed.data.altText;
-  if (parsed.data.credit !== undefined) updates.credit = parsed.data.credit;
+  if (parsed.data.credit  !== undefined) updates.credit  = parsed.data.credit;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update." });
@@ -246,7 +246,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
   const [media] = await db
     .update(mediaTable)
     .set(updates)
-    .where(eq(mediaTable.id, id))
+    .where(and(eq(mediaTable.id, id), eq(mediaTable.ownerId, ownerId)))
     .returning();
 
   if (!media) {
@@ -257,23 +257,29 @@ router.patch("/:id", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /admin/media/:id/slot-suggestions
+// GET /admin/media/:id/slot-suggestions  — owner-scoped media lookup
 // ---------------------------------------------------------------------------
 router.get("/:id/slot-suggestions", async (req: Request, res: Response) => {
-  const id = req.params["id"] as string;
+  const id      = req.params["id"] as string;
+  const ownerId = req.user!.id;
+
   const [media] = await db
     .select()
     .from(mediaTable)
-    .where(eq(mediaTable.id, id));
+    .where(and(eq(mediaTable.id, id), eq(mediaTable.ownerId, ownerId)));
   if (!media) {
     res.status(404).json({ error: "Media not found." });
     return;
   }
 
   const mediaAspect = parseFloat(media.aspectRatio as string);
-  const mediaW = media.width;
+  const mediaW      = media.width;
 
-  const slots = await db.select().from(imageSlotsTable);
+  // Slots are scoped to owner — only show slots this user can assign
+  const slots = await db
+    .select()
+    .from(imageSlotsTable)
+    .where(eq(imageSlotsTable.ownerId, ownerId));
 
   // Filter: width >= minWidth AND ratio within 25% of slot's ratio
   const suggestions = slots
@@ -299,7 +305,7 @@ router.get("/:id/slot-suggestions", async (req: Request, res: Response) => {
           .from(mediaTable)
           .where(eq(mediaTable.id, slot.currentMediaId));
         if (cur) {
-          const derivs = cur.derivatives as Record<string, string>;
+          const derivs  = cur.derivatives as Record<string, string>;
           const thumbKey = derivs["480"] ?? derivs["960"] ?? cur.storageKey;
           currentThumbnail = isConfigured() ? publicUrl(thumbKey) : thumbKey;
         }
@@ -312,14 +318,16 @@ router.get("/:id/slot-suggestions", async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// DELETE /admin/media/:id
+// DELETE /admin/media/:id  — owner-scoped
 // ---------------------------------------------------------------------------
 router.delete("/:id", async (req: Request, res: Response) => {
-  const id = req.params["id"] as string;
+  const id      = req.params["id"] as string;
+  const ownerId = req.user!.id;
+
   const [media] = await db
     .select()
     .from(mediaTable)
-    .where(eq(mediaTable.id, id));
+    .where(and(eq(mediaTable.id, id), eq(mediaTable.ownerId, ownerId)));
   if (!media) {
     res.status(404).json({ error: "Media not found." });
     return;
@@ -338,8 +346,13 @@ router.delete("/:id", async (req: Request, res: Response) => {
     }
   }
 
-  await db.delete(mediaTable).where(eq(mediaTable.id, id));
+  await db
+    .delete(mediaTable)
+    .where(and(eq(mediaTable.id, id), eq(mediaTable.ownerId, ownerId)));
   res.json({ ok: true });
 });
+
+// Suppress unused import (isNull used via import side-effects for tree shaking)
+void isNull;
 
 export default router;

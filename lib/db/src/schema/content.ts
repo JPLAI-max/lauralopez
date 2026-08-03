@@ -141,16 +141,21 @@ export type InsertArticle = typeof articlesTable.$inferInsert;
 // ---------------------------------------------------------------------------
 // image_slots  — named fixed positions on the public site
 // ---------------------------------------------------------------------------
-export const imageSlotsTable = pgTable("image_slots", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  slotKey: text("slot_key").notNull().unique(),
-  label: text("label").notNull(),
-  aspectRatio: decimal("aspect_ratio", { precision: 6, scale: 4 }).notNull(),
-  minWidth: integer("min_width").notNull(),
-  currentMediaId: uuid("current_media_id"),
-  currentPropertyId: uuid("current_property_id"),
-  assignedAt: timestamp("assigned_at", { withTimezone: true }),
-});
+export const imageSlotsTable = pgTable(
+  "image_slots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id").notNull(),
+    slotKey: text("slot_key").notNull().unique(),
+    label: text("label").notNull(),
+    aspectRatio: decimal("aspect_ratio", { precision: 6, scale: 4 }).notNull(),
+    minWidth: integer("min_width").notNull(),
+    currentMediaId: uuid("current_media_id"),
+    currentPropertyId: uuid("current_property_id"),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }),
+  },
+  (t) => [index("image_slots_owner_id_idx").on(t.ownerId)],
+);
 
 export type ImageSlot = typeof imageSlotsTable.$inferSelect;
 export type InsertImageSlot = typeof imageSlotsTable.$inferInsert;
@@ -162,6 +167,7 @@ export const slotAssignmentsTable = pgTable(
   "slot_assignments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id").notNull(),
     slotKey: text("slot_key").notNull(),
     mediaId: uuid("media_id").notNull(),
     propertyId: uuid("property_id"),
@@ -170,7 +176,9 @@ export const slotAssignmentsTable = pgTable(
     unassignedAt: timestamp("unassigned_at", { withTimezone: true }),
   },
   (t) => [
+    index("slot_assignments_owner_id_idx").on(t.ownerId),
     index("slot_assignments_slot_key_idx").on(t.slotKey),
+    index("slot_assignments_slot_owner_idx").on(t.slotKey, t.ownerId),
     index("slot_assignments_slot_unassigned_idx").on(t.slotKey, t.unassignedAt),
   ],
 );

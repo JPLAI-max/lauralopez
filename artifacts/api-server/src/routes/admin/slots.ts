@@ -16,22 +16,30 @@ function slotMediaUrl(storageKey: string, derivatives: Record<string, string>): 
 }
 
 // ---------------------------------------------------------------------------
-// GET /admin/slots  — all slots with resolved current media
+// GET /admin/slots  — owner-scoped slots with resolved current media
 // ---------------------------------------------------------------------------
-router.get("/", async (_req: Request, res: Response) => {
-  const slots = await db.select().from(imageSlotsTable);
+router.get("/", async (req: Request, res: Response) => {
+  const ownerId = req.user!.id;
+
+  const slots = await db
+    .select()
+    .from(imageSlotsTable)
+    .where(eq(imageSlotsTable.ownerId, ownerId));
 
   const enriched = await Promise.all(
     slots.map(async (slot) => {
       let currentMedia: { id: string; filename: string; url: string | null } | null = null;
       if (slot.currentMediaId) {
-        const [m] = await db.select().from(mediaTable).where(eq(mediaTable.id, slot.currentMediaId));
+        const [m] = await db
+          .select()
+          .from(mediaTable)
+          .where(eq(mediaTable.id, slot.currentMediaId));
         if (m) {
           const derivs = m.derivatives as Record<string, string>;
           currentMedia = {
-            id: m.id,
+            id:       m.id,
             filename: m.filename,
-            url: slotMediaUrl(m.storageKey, derivs),
+            url:      slotMediaUrl(m.storageKey, derivs),
           };
         }
       }
@@ -46,7 +54,7 @@ router.get("/", async (_req: Request, res: Response) => {
 // POST /admin/slots/:slotKey/assign
 // ---------------------------------------------------------------------------
 const AssignBody = z.object({
-  mediaId: z.string().uuid(),
+  mediaId:    z.string().uuid(),
   propertyId: z.string().uuid().optional(),
 });
 
@@ -58,53 +66,60 @@ router.post("/:slotKey/assign", async (req: Request, res: Response) => {
   }
   const { mediaId, propertyId } = parsed.data;
   const slotKey = req.params["slotKey"] as string;
+  const ownerId = req.user!.id;
 
-  // Verify slot exists
-  const [slot] = await db.select().from(imageSlotsTable).where(eq(imageSlotsTable.slotKey, slotKey));
+  // Verify slot exists and belongs to this owner
+  const [slot] = await db
+    .select()
+    .from(imageSlotsTable)
+    .where(and(eq(imageSlotsTable.slotKey, slotKey), eq(imageSlotsTable.ownerId, ownerId)));
   if (!slot) {
     res.status(404).json({ error: "Slot not found." });
     return;
   }
 
-  // Verify media exists
-  const [media] = await db.select().from(mediaTable).where(eq(mediaTable.id, mediaId));
+  // Verify media exists and belongs to this owner
+  const [media] = await db
+    .select()
+    .from(mediaTable)
+    .where(and(eq(mediaTable.id, mediaId), eq(mediaTable.ownerId, ownerId)));
   if (!media) {
     res.status(404).json({ error: "Media not found." });
     return;
   }
 
-  const user = (req as Request & { user?: { id: string } }).user;
-  const assignedBy = user?.id ?? "00000000-0000-0000-0000-000000000000";
   const now = new Date();
 
-  // Close any open assignment for this slot
+  // Close any open assignment for this slot that belongs to this owner
   await db
     .update(slotAssignmentsTable)
     .set({ unassignedAt: now })
     .where(
       and(
         eq(slotAssignmentsTable.slotKey, slotKey),
+        eq(slotAssignmentsTable.ownerId, ownerId),
         isNull(slotAssignmentsTable.unassignedAt),
       ),
     );
 
   // Open new assignment
   await db.insert(slotAssignmentsTable).values({
+    ownerId,
     slotKey,
     mediaId,
     propertyId: propertyId ?? null,
-    assignedBy,
+    assignedBy: ownerId,
   });
 
   // Update image_slots current pointer
   const [updated] = await db
     .update(imageSlotsTable)
     .set({
-      currentMediaId: mediaId,
+      currentMediaId:    mediaId,
       currentPropertyId: propertyId ?? null,
-      assignedAt: now,
+      assignedAt:        now,
     })
-    .where(eq(imageSlotsTable.slotKey, slotKey))
+    .where(and(eq(imageSlotsTable.slotKey, slotKey), eq(imageSlotsTable.ownerId, ownerId)))
     .returning();
 
   res.json({ slot: updated });
@@ -115,24 +130,22 @@ router.post("/:slotKey/assign", async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 router.post("/:slotKey/revert", async (req: Request, res: Response) => {
   const slotKey = req.params["slotKey"] as string;
+  const ownerId = req.user!.id;
 
-  // Get the two most recent assignments (including the currently open one)
+  // Get the two most recent assignments for this owner+slot
   const recent = await db
     .select()
     .from(slotAssignmentsTable)
-    .where(eq(slotAssignmentsTable.slotKey, slotKey))
+    .where(and(eq(slotAssignmentsTable.slotKey, slotKey), eq(slotAssignmentsTable.ownerId, ownerId)))
     .orderBy(desc(slotAssignmentsTable.assignedAt))
     .limit(2);
 
-  // We need at least two to have a "previous"
   if (recent.length < 2) {
     res.status(409).json({ error: "No previous assignment to revert to." });
     return;
   }
 
   const [current, previous] = recent;
-  const user = (req as Request & { user?: { id: string } }).user;
-  const assignedBy = user?.id ?? "00000000-0000-0000-0000-000000000000";
   const now = new Date();
 
   // Close current open assignment
@@ -140,26 +153,32 @@ router.post("/:slotKey/revert", async (req: Request, res: Response) => {
     await db
       .update(slotAssignmentsTable)
       .set({ unassignedAt: now })
-      .where(eq(slotAssignmentsTable.id, current.id));
+      .where(
+        and(
+          eq(slotAssignmentsTable.id, current.id),
+          eq(slotAssignmentsTable.ownerId, ownerId),
+        ),
+      );
   }
 
   // Open a new assignment with the previous media
   await db.insert(slotAssignmentsTable).values({
+    ownerId,
     slotKey,
-    mediaId: previous.mediaId,
+    mediaId:    previous.mediaId,
     propertyId: previous.propertyId ?? null,
-    assignedBy,
+    assignedBy: ownerId,
   });
 
-  // Update slot pointer
+  // Update slot pointer — only if this owner owns the slot
   const [updated] = await db
     .update(imageSlotsTable)
     .set({
-      currentMediaId: previous.mediaId,
+      currentMediaId:    previous.mediaId,
       currentPropertyId: previous.propertyId ?? null,
-      assignedAt: now,
+      assignedAt:        now,
     })
-    .where(eq(imageSlotsTable.slotKey, slotKey))
+    .where(and(eq(imageSlotsTable.slotKey, slotKey), eq(imageSlotsTable.ownerId, ownerId)))
     .returning();
 
   res.json({ slot: updated });

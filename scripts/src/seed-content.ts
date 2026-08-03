@@ -306,7 +306,7 @@ async function main() {
       .from(imageSlotsTable)
       .where(eq(imageSlotsTable.slotKey, s.slotKey));
     if (existing) { slotSkipped++; continue; }
-    await db.insert(imageSlotsTable).values(s);
+    await db.insert(imageSlotsTable).values({ ...s, ownerId });
     slotSeeded++;
   }
   console.log(`  image_slots: ${slotSeeded} seeded, ${slotSkipped} skipped`);
