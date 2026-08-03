@@ -15,9 +15,9 @@ export default function Navbar() {
     };
   }, [mobileOpen]);
 
-  // Close drawer automatically when viewport crosses to >= 768px (e.g. tablet rotation)
+  // Close drawer automatically when viewport crosses to >= 1024px (desktop breakpoint)
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
+    const mq = window.matchMedia("(min-width: 1024px)");
     const handler = (e: MediaQueryListEvent) => {
       if (e.matches) setMobileOpen(false);
     };
@@ -38,19 +38,20 @@ export default function Navbar() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-primary shadow-md border-b border-primary/20">
       <div className="container mx-auto px-6 h-20 md:h-24 flex items-center justify-between">
-        <Link href="/" className="flex items-center" data-testid="link-home-logo" onClick={handleNav}>
+        {/* shrink-0 prevents the logo from being squeezed by the nav row */}
+        <Link href="/" className="flex items-center shrink-0" data-testid="link-home-logo" onClick={handleNav}>
           {/* Logo height is fluid — if navbar h-20/md:h-24 changes, update --header-h in index.css too */}
           <img src={tbheLogo} alt="The Beverly Hills Estates" className="h-[clamp(2.25rem,4vw,4rem)] w-auto" />
         </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden md:flex items-center space-x-8">
+        {/* Desktop nav — visible at lg (1024px+); fluid gap compresses between 1024–1440px */}
+        <nav className="hidden lg:flex items-center gap-[clamp(1.25rem,2.2vw,2rem)]">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               data-testid={`link-nav-${link.label.toLowerCase().replace(" ", "-")}`}
-              className={`text-sm tracking-wider uppercase font-sans transition-colors hover:text-secondary ${
+              className={`whitespace-nowrap text-sm tracking-wider uppercase font-sans transition-colors hover:text-secondary ${
                 location === link.href ? "text-secondary" : "text-white"
               }`}
             >
@@ -60,7 +61,7 @@ export default function Navbar() {
           <Link
             href="/contact"
             data-testid="link-nav-contact-cta"
-            className={`px-6 py-3 text-sm tracking-wider uppercase font-sans transition-all border ${
+            className={`whitespace-nowrap px-[clamp(1rem,1.6vw,1.5rem)] py-3 text-sm tracking-wider uppercase font-sans transition-all border ${
               location === "/contact"
                 ? "bg-secondary border-secondary text-white"
                 : "bg-transparent border-white text-white hover:bg-white hover:text-primary"
@@ -70,9 +71,9 @@ export default function Navbar() {
           </Link>
         </nav>
 
-        {/* Mobile hamburger */}
+        {/* Mobile hamburger — hidden at lg (1024px+) */}
         <button
-          className="md:hidden text-white p-2"
+          className="lg:hidden text-white p-2"
           onClick={() => setMobileOpen((o) => !o)}
           data-testid="button-mobile-menu"
           aria-label="Toggle menu"
@@ -81,10 +82,10 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* Mobile drawer — max-h + overflow-y-auto so it scrolls on very short viewports */}
+      {/* Mobile drawer — hidden at lg (1024px+); scrolls on very short viewports */}
       {mobileOpen && (
         <div
-          className="md:hidden bg-primary border-t border-primary/20 px-6 pb-8 pt-4 flex flex-col gap-6 overflow-y-auto"
+          className="lg:hidden bg-primary border-t border-primary/20 px-6 pb-8 pt-4 flex flex-col gap-6 overflow-y-auto"
           style={{ maxHeight: "calc(100svh - var(--header-h))" }}
         >
           {navLinks.map((link) => (
