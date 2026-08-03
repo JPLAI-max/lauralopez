@@ -547,6 +547,14 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
     if (rows[0]?.value) agentName = rows[0].value;
   } catch { /* ignore */ }
 
+  // Resolve copy model from settings (non-failing — falls back to DEFAULT_COPY_MODEL)
+  let copyModel: string | undefined;
+  try {
+    const rows = await db.select({ value: settingsTable.value }).from(settingsTable)
+      .where(and(eq(settingsTable.ownerId, ownerId), eq(settingsTable.key, "copy_model"))).limit(1);
+    if (rows[0]?.value) copyModel = rows[0].value;
+  } catch { /* ignore */ }
+
   // Use soldPrice for sold trigger, listPrice for everything else.
   // Fall back to the other value when the preferred one is null.
   const rawPrice  = campaign.trigger === "sold"
@@ -774,7 +782,7 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
         task.channel === "mailer" ? "mailer" : "postcard";
 
       // Step 1 — generate copy (works without R2)
-      const copyResult = await generateCampaignCopy(pdfChannel as CopyChannel, facts);
+      const copyResult = await generateCampaignCopy(pdfChannel as CopyChannel, facts, copyModel);
       const parsedCopy = parsePrintCopy(copyResult.raw);
       textContent      = copyResult.raw;   // always stored, even if PDF fails
 
@@ -813,7 +821,7 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
       const copyChannel: CopyChannel =
         task.assetType === "email_html" ? "email"
         : task.channel as CopyChannel;
-      const result = await generateCampaignCopy(copyChannel, facts);
+      const result = await generateCampaignCopy(copyChannel, facts, copyModel);
       textContent  = result.raw;
       storageKey   = result.storageKey;
       assetType    = task.assetType ?? "script_txt";

@@ -50,6 +50,8 @@ export interface PdfGenInput {
   headline?:       string;
   body?:           string;
   cta?:            string;
+  /** When true, skip R2 upload and return the buffer only (for scripts/preview). */
+  previewOnly?:    boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -227,8 +229,13 @@ export async function generateCampaignPdf(input: PdfGenInput): Promise<{
   // ---------------------------------------------------------------------------
   // Serialize
   // ---------------------------------------------------------------------------
-  const bytes      = await pdfDoc.save();
-  const buffer     = Buffer.from(bytes);
+  const bytes  = await pdfDoc.save();
+  const buffer = Buffer.from(bytes);
+
+  if (input.previewOnly) {
+    return { storageKey: null as unknown as string, buffer: bytes };
+  }
+
   const storageKey = `campaigns/pdf/${randomBytes(12).toString("hex")}_${channel}.pdf`;
   await putObject(storageKey, buffer, "application/pdf");
 

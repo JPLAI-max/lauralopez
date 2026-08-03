@@ -1,15 +1,21 @@
 /**
- * Campaign copy generator via Anthropic claude-haiku-4-5.
+ * Campaign copy generator via Anthropic (model read from settings at runtime).
  *
  * HARD RULE: The model writes around {{price}}, {{address}}, {{beds}},
  * {{baths}}, {{sqft}}, {{yearBuilt}} placeholders.
- * After generation we substitute the real values. Any draft still
- * containing a raw digit outside a placeholder is REJECTED.
+ * After generation we substitute the real values. Any draft containing a
+ * raw digit outside a placeholder is REJECTED.
+ *
+ * Retry policy: on first rejection, retry once with a corrective instruction
+ * that names the violated rule. If the second attempt also fails, throw
+ * RAW_DIGIT_IN_COPY and include BOTH drafts in the error payload.
+ * Both rejections are logged at warn level with channel + draft.
  */
 
 import { anthropic } from "@workspace/integrations-anthropic-ai";
 import { randomBytes } from "node:crypto";
 import { putObject } from "./storage";
+import { logger } from "./logger";
 
 // Channels that produce copy
 export type CopyChannel =
@@ -31,9 +37,14 @@ export interface PropertyFacts {
 }
 
 export interface CopyOutput {
-  raw:          string;   // after substitution (no placeholders remain)
-  storageKey:   string | null;   // null if R2 not configured
+  raw:          string;            // after substitution (no placeholders remain)
+  storageKey:   string | null;     // null if R2 not configured
 }
+
+// ---------------------------------------------------------------------------
+// Default model — used when no copy_model setting is configured
+// ---------------------------------------------------------------------------
+export const DEFAULT_COPY_MODEL = "claude-sonnet-4-6";
 
 // ---------------------------------------------------------------------------
 // Placeholder substitution
@@ -49,12 +60,10 @@ function substitute(text: string, facts: PropertyFacts): string {
 }
 
 /**
- * Checks whether any raw digits remain outside {{...}} placeholders.
- * Returns true if the copy is clean, false if it must be rejected.
+ * Returns true when no raw digit exists outside {{...}} placeholders.
+ * Called on the PRE-substitution draft so placeholders are still intact.
  */
 function noRawDigits(text: string): boolean {
-  // Remove all remaining {{...}} (already substituted — none should remain)
-  // Then check for any digit
   const stripped = text.replace(/\{\{[^}]+\}\}/g, "");
   return !/\d/.test(stripped);
 }
@@ -106,47 +115,96 @@ CTA: [call to action, max 40 chars]`,
 }
 
 // ---------------------------------------------------------------------------
-// Main generator
+// Internal — single Anthropic call
 // ---------------------------------------------------------------------------
-export async function generateCampaignCopy(
-  channel: CopyChannel,
-  facts: PropertyFacts,
-): Promise<CopyOutput> {
-  const message = await anthropic.messages.create({
-    model:      "claude-haiku-4-5",
+type Msg = { role: "user" | "assistant"; content: string };
+
+async function callModel(model: string, messages: Msg[]): Promise<string> {
+  const response = await anthropic.messages.create({
+    model,
     max_tokens: 8192,
     system:     systemPrompt(),
-    messages:   [{ role: "user", content: userPrompt(channel, facts) }],
+    messages,
   });
-
-  const block = message.content[0];
+  const block = response.content[0];
   if (!block || block.type !== "text") {
     throw new Error("Anthropic returned no text content");
   }
+  return block.text.trim();
+}
 
-  const rawDraft = block.text.trim();
+// ---------------------------------------------------------------------------
+// Main generator
+// ---------------------------------------------------------------------------
+/**
+ * @param model  Anthropic model name. If omitted, falls back to DEFAULT_COPY_MODEL.
+ *               Pass the value of the `copy_model` setting from the owner's settings
+ *               table so the model can change without a redeploy.
+ */
+export async function generateCampaignCopy(
+  channel: CopyChannel,
+  facts:   PropertyFacts,
+  model?:  string,
+): Promise<CopyOutput> {
+  const useModel = model ?? DEFAULT_COPY_MODEL;
 
-  // Substitute placeholders
-  const substituted = substitute(rawDraft, facts);
+  // ── Attempt 1 ────────────────────────────────────────────────────────────
+  const firstMessages: Msg[] = [{ role: "user", content: userPrompt(channel, facts) }];
+  const rawDraft1 = await callModel(useModel, firstMessages);
 
-  // Hard reject: any digit outside a placeholder that somehow survived
-  if (!noRawDigits(rawDraft)) {
-    throw Object.assign(
-      new Error(
-        `Generated copy contains a raw digit outside a placeholder. ` +
-        `The model must use {{price}}, {{address}}, etc. Rejected draft.`,
-      ),
-      { code: "RAW_DIGIT_IN_COPY", draft: rawDraft },
+  let rawDraft: string;
+
+  if (!noRawDigits(rawDraft1)) {
+    // Log and retry once
+    logger.warn(
+      { channel, model: useModel, draft: rawDraft1 },
+      "campaign-copy-gen: digit rejection on attempt 1 — retrying",
     );
+
+    // ── Attempt 2 — corrective instruction ──────────────────────────────────
+    const retryMessages: Msg[] = [
+      ...firstMessages,
+      { role: "assistant", content: rawDraft1 },
+      {
+        role: "user",
+        content:
+          "Your previous response violated the rules: it contained one or more raw digit " +
+          "characters (0–9) outside a placeholder. You MUST use ONLY the placeholders " +
+          "{{price}}, {{beds}}, {{baths}}, {{sqft}}, {{yearBuilt}} wherever a number " +
+          "is needed. Rewrite the copy now with absolutely no bare digits anywhere.",
+      },
+    ];
+
+    const rawDraft2 = await callModel(useModel, retryMessages);
+
+    if (!noRawDigits(rawDraft2)) {
+      logger.warn(
+        { channel, model: useModel, draft: rawDraft2 },
+        "campaign-copy-gen: digit rejection on attempt 2 — giving up",
+      );
+      throw Object.assign(
+        new Error(
+          `Generated copy contains raw digits outside placeholders after retry. Both drafts rejected.\n` +
+          `Draft 1: ${rawDraft1}\nDraft 2: ${rawDraft2}`,
+        ),
+        { code: "RAW_DIGIT_IN_COPY", draft1: rawDraft1, draft2: rawDraft2 },
+      );
+    }
+
+    rawDraft = rawDraft2;
+  } else {
+    rawDraft = rawDraft1;
   }
 
-  // Optionally store to R2 as a text file (for email/long-form)
+  // ── Substitute real values and store ─────────────────────────────────────
+  const substituted = substitute(rawDraft, facts);
+
   let storageKey: string | null = null;
   try {
     storageKey = `campaigns/copy/${randomBytes(12).toString("hex")}_${channel}.txt`;
     await putObject(storageKey, Buffer.from(substituted, "utf8"), "text/plain");
   } catch {
-    storageKey = null; // R2 not configured or failed — text will live in DB only
+    storageKey = null; // R2 not configured or failed — text lives in DB only
   }
 
   return { raw: substituted, storageKey };
