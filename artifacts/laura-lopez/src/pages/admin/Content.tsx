@@ -145,7 +145,21 @@ function ArticlesTab() {
             <h3 className="font-sans text-xs uppercase tracking-widest text-muted-foreground">
               {creating ? "New Article" : "Edit Article"}
             </h3>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              {!creating && editing && (
+                editing.status === "published" ? (
+                  <a
+                    href={`/market-intelligence/${editing.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-sans text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
+                  >
+                    View public page ↗
+                  </a>
+                ) : (
+                  <span className="font-sans text-[10px] text-muted-foreground/50 italic">Draft — not published</span>
+                )
+              )}
               <button
                 onClick={() => setPreview(!preview)}
                 className="px-2 py-1 border border-border font-sans text-xs uppercase tracking-widest hover:bg-muted"
@@ -264,9 +278,25 @@ function ArticlesTab() {
                 <p className="text-sm font-medium truncate">{a.title}</p>
                 <p className="text-xs text-muted-foreground">{a.status === "published" ? fmt(a.publishedAt) : `Updated ${fmt(a.updatedAt)}`}</p>
               </div>
-              <div className="flex gap-1 shrink-0">
-                <button onClick={() => openEdit(a)} className="px-2 py-1 border border-border font-sans text-xs hover:bg-muted">Edit</button>
-                <button onClick={() => del(a.id)} className="px-2 py-1 border border-destructive/40 text-destructive font-sans text-xs hover:bg-destructive/10">Del</button>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <div className="flex gap-1">
+                  <button onClick={() => openEdit(a)} className="px-2 py-1 border border-border font-sans text-xs hover:bg-muted">Edit</button>
+                  <button onClick={() => del(a.id)} className="px-2 py-1 border border-destructive/40 text-destructive font-sans text-xs hover:bg-destructive/10">Del</button>
+                </div>
+                {a.status === "published" ? (
+                  <a
+                    href={`/market-intelligence/${a.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-sans text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5"
+                  >
+                    View public page ↗
+                  </a>
+                ) : (
+                  <span className="font-sans text-[10px] text-muted-foreground/50 italic">
+                    Draft — not published
+                  </span>
+                )}
               </div>
             </div>
           ))}
@@ -662,10 +692,22 @@ function PropertiesTab() {
                   {p.soldPrice && p.soldDate ? ` · Sold ${fmt(p.soldDate)}` : ""}
                 </p>
               </div>
-              <div className="flex gap-1 shrink-0">
-                <button onClick={() => openEdit(p)} className="px-2 py-1 border border-border font-sans text-xs hover:bg-muted">Edit</button>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                <div className="flex gap-1">
+                  <button onClick={() => openEdit(p)} className="px-2 py-1 border border-border font-sans text-xs hover:bg-muted">Edit</button>
+                  {!p.archived && (
+                    <button onClick={() => archive(p.id)} className="px-2 py-1 border border-border font-sans text-xs hover:bg-muted text-muted-foreground">Archive</button>
+                  )}
+                </div>
                 {!p.archived && (
-                  <button onClick={() => archive(p.id)} className="px-2 py-1 border border-border font-sans text-xs hover:bg-muted text-muted-foreground">Archive</button>
+                  <a
+                    href={p.status === "pick" ? "/top-picks" : p.status === "listed" ? "/listings" : "/sold"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-sans text-[10px] text-muted-foreground hover:text-primary"
+                  >
+                    View public page ↗
+                  </a>
                 )}
               </div>
             </div>

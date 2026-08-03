@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Megaphone,
+  ExternalLink,
 } from "lucide-react";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -111,13 +112,24 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
         <div className="flex flex-col flex-1 p-3 gap-4">
           <NavContent />
-          <button
-            onClick={() => logout.mutate()}
-            className="flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground hover:text-destructive hover:bg-muted rounded transition-colors w-full text-left"
-          >
-            <LogOut size={16} className="shrink-0" />
-            Sign out
-          </button>
+          <div className="flex flex-col gap-0.5">
+            <button
+              onClick={() => logout.mutate()}
+              className="flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground hover:text-destructive hover:bg-muted rounded transition-colors w-full text-left"
+            >
+              <LogOut size={16} className="shrink-0" />
+              Sign out
+            </button>
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted rounded transition-colors"
+            >
+              <ExternalLink size={12} className="shrink-0" />
+              View Site
+            </a>
+          </div>
         </div>
       </aside>
 
@@ -150,13 +162,25 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">{user?.name ?? "—"}</p>
               </div>
               <NavContent />
-              <button
-                onClick={() => { logout.mutate(); handleNav(); }}
-                className="flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground hover:text-destructive hover:bg-muted rounded transition-colors w-full text-left"
-              >
-                <LogOut size={16} className="shrink-0" />
-                Sign out
-              </button>
+              <div className="flex flex-col gap-0.5">
+                <button
+                  onClick={() => { logout.mutate(); handleNav(); }}
+                  className="flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground hover:text-destructive hover:bg-muted rounded transition-colors w-full text-left"
+                >
+                  <LogOut size={16} className="shrink-0" />
+                  Sign out
+                </button>
+                <a
+                  href="/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={handleNav}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted rounded transition-colors"
+                >
+                  <ExternalLink size={12} className="shrink-0" />
+                  View Site
+                </a>
+              </div>
             </div>
           </div>
         )}
