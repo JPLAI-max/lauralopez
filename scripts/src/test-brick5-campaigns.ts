@@ -222,12 +222,45 @@ function fail(n: number, msg: string): never { console.error(`  ❌ [${n}/12] ${
     pass(10, `PATCH task overrideDate to ${anchorDate}`);
   }
 
-  // ── Check 11: generate endpoint callable ─────────────────────────────────
+  // ── Check 11: generate assets — copy branch (email) AND print_pdf branch ──
+  // Verifies both the email copy pipeline (no R2) and the print_pdf routing
+  // fix (assetType print_pdf must reach the PDF branch, not the copy branch).
   {
-    const { status } = await req("POST", `/admin/campaign-tasks/${firstNonManualTaskId}/generate`);
-    // 200 = success, 500/422/503 = AI/R2 not wired in test env — both are acceptable
-    if (![200, 500, 422, 503].includes(status)) fail(11, `generate status ${status} unexpected`);
-    pass(11, `POST /admin/campaign-tasks/:id/generate returns ${status} (200 or env error)`);
+    const { body: detailBody } = await req("GET", `/admin/campaigns/${campaignId}`);
+    const allTasks = (detailBody as { tasks: { id: string; channel: string; assetType: string | null; status: string }[] }).tasks;
+
+    // 11a — email copy (copy branch)
+    const emailTask = allTasks.find((t) => t.channel === "email" && t.assetType === "email_html");
+    if (!emailTask) fail(11, "No email/email_html task found in campaign");
+    {
+      const { status, body } = await req("POST", `/admin/campaign-tasks/${emailTask!.id}/generate`);
+      if (status !== 201) fail(11, `email generate → ${status}: ${JSON.stringify(body)}`);
+      const asset = (body as { asset: { textContent: string | null; status: string } }).asset;
+      if (!asset.textContent) fail(11, "email asset has no textContent");
+      if (asset.status !== "draft") fail(11, `email asset status must be draft, got ${asset.status}`);
+      if (!asset.textContent.includes("Campaign Test Rd"))
+        fail(11, `email copy missing substituted address. Got: ${asset.textContent.slice(0, 200)}`);
+      if (/\{\{[^}]+\}\}/.test(asset.textContent))
+        fail(11, `email copy has unsubstituted placeholder. Got: ${asset.textContent.slice(0, 200)}`);
+    }
+
+    // 11b — print_pdf (must run copy-first pipeline, not generic copy branch)
+    const postcardTask = allTasks.find((t) => t.assetType === "print_pdf");
+    if (!postcardTask) fail(11, "No print_pdf task found in campaign");
+    {
+      const { status, body } = await req("POST", `/admin/campaign-tasks/${postcardTask!.id}/generate`);
+      if (status !== 201) fail(11, `print_pdf generate → ${status}: ${JSON.stringify(body)}`);
+      const asset = (body as { asset: { textContent: string | null; status: string; assetType: string } }).asset;
+      if (!asset.textContent)
+        fail(11, "print_pdf asset has no textContent — copy-first pipeline did not run");
+      if (asset.status !== "draft") fail(11, `print_pdf status must be draft, got ${asset.status}`);
+      if (asset.assetType !== "print_pdf")
+        fail(11, `assetType must be print_pdf, got ${asset.assetType}`);
+      if (!asset.textContent.includes("Campaign Test Rd"))
+        fail(11, `print_pdf copy missing address. Got: ${asset.textContent.slice(0, 200)}`);
+    }
+
+    pass(11, "generate email (copy branch) + postcard (print_pdf copy-first) → 201, draft, address substituted");
   }
 
   // ── Check 12: cancel campaign ─────────────────────────────────────────────

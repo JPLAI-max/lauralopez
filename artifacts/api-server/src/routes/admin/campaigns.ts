@@ -21,6 +21,44 @@ const router: IRouter = Router();
 const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD");
 
 // ---------------------------------------------------------------------------
+// parsePrintCopy — extract HEADLINE/BODY/CTA from structured copy output
+// ---------------------------------------------------------------------------
+interface PrintCopyFields {
+  headline?: string;
+  body?:     string;
+  cta?:      string;
+}
+
+function parsePrintCopy(raw: string): PrintCopyFields {
+  const result: PrintCopyFields = {};
+  const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    const hlMatch = line.match(/^HEADLINE:\s*(.+)$/i);
+    if (hlMatch) { result.headline = hlMatch[1]!.trim(); continue; }
+
+    const bodyMatch = line.match(/^BODY:\s*(.+)$/i);
+    if (bodyMatch) { result.body = bodyMatch[1]!.trim(); continue; }
+
+    const ctaMatch = line.match(/^CTA:\s*(.+)$/i);
+    if (ctaMatch) { result.cta = ctaMatch[1]!.trim(); continue; }
+  }
+
+  // Multi-line BODY: collect everything between BODY: and CTA: labels
+  const bodyStart = raw.search(/^BODY:/im);
+  const ctaStart  = raw.search(/^CTA:/im);
+  if (bodyStart !== -1) {
+    const bodySlice = ctaStart !== -1 && ctaStart > bodyStart
+      ? raw.slice(bodyStart, ctaStart)
+      : raw.slice(bodyStart);
+    const bodyText = bodySlice.replace(/^BODY:\s*/i, "").replace(/\nCTA:.*$/is, "").trim();
+    if (bodyText) result.body = bodyText;
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 async function logEvent(
@@ -486,7 +524,7 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
   let assetType:   string        = task.assetType ?? task.channel;
 
   try {
-    // ── IMAGE ──────────────────────────────────────────────────────────────
+    // ── IMAGE ─────────────────────────────────────────────────────────────
     if (task.assetType === "image_1x1" || task.assetType === "image_9x16") {
       if (!isConfigured()) {
         res.status(503).json({ error: "Storage not configured — cannot generate images." });
@@ -496,7 +534,6 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
         res.status(422).json({ error: "Property has no hero media set — cannot generate image." });
         return;
       }
-
       const [media] = await db
         .select()
         .from(mediaTable)
@@ -506,10 +543,8 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
         res.status(422).json({ error: "Hero media not found or not owned by you." });
         return;
       }
-
       const sourceBuffer = await getObjectBuffer(media.storageKey);
       const [tw, th]     = task.assetType === "image_1x1" ? [1080, 1080] : [1080, 1920];
-
       const result = await generateCampaignImage({
         sourceBuffer,
         srcWidth:  media.width,
@@ -527,44 +562,64 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
       });
       storageKey = result.storageKey;
 
-    // ── COPY ──────────────────────────────────────────────────────────────
-    } else if (task.assetType === "email_html" || task.channel === "email" ||
-               task.channel === "instagram_post" || task.channel === "instagram_story" ||
-               task.channel === "postcard" || task.channel === "mailer" ||
-               task.channel === "voicemail") {
-      // Determine copy channel
-      const copyChannel: CopyChannel =
-        task.assetType === "email_html" ? "email"
-        : task.channel as CopyChannel;
-
-      const result   = await generateCampaignCopy(copyChannel, facts);
-      textContent    = result.raw;
-      storageKey     = result.storageKey;
-      assetType      = task.assetType ?? "script_txt";
-
-    // ── PDF ───────────────────────────────────────────────────────────────
+    // ── PRINT PDF — copy-first pipeline ────────────────────────────────────
+    // Must be checked BEFORE the generic channel-based copy branch because
+    // postcard/mailer tasks can have assetType "print_pdf".  We generate copy
+    // (Anthropic call), parse HEADLINE/BODY/CTA, then render the PDF.  If R2
+    // is not configured the copy is still preserved as textContent.
     } else if (task.assetType === "print_pdf") {
-      if (!isConfigured()) {
-        res.status(503).json({ error: "Storage not configured — cannot generate PDFs." });
-        return;
-      }
       const pdfChannel: PdfChannel =
         task.channel === "mailer" ? "mailer" : "postcard";
 
-      const result = await generateCampaignPdf({
-        channel:         pdfChannel,
-        address:         property.address,
-        price:           priceStr,
-        agentName,
-        dreLicense,
-        brokerageName,
-        listingBrokerage: property.isLauraListing ? null : property.listingBrokerage,
-      });
-      storageKey = result.storageKey;
-      assetType  = "print_pdf";
+      // Step 1 — generate copy (works without R2)
+      const copyResult = await generateCampaignCopy(pdfChannel as CopyChannel, facts);
+      const parsedCopy = parsePrintCopy(copyResult.raw);
+      textContent      = copyResult.raw;   // always stored, even if PDF fails
+
+      // Step 2 — render PDF (requires R2; gracefully skipped if not configured)
+      if (!isConfigured()) {
+        // R2 absent: persist copy-only asset so the content is not lost.
+        // storageKey remains null; the asset still carries textContent.
+        logger.warn({ taskId }, "R2 not configured — print_pdf copy stored without PDF binary");
+      } else {
+        const result = await generateCampaignPdf({
+          channel:         pdfChannel,
+          address:         property.address,
+          price:           priceStr,
+          agentName,
+          dreLicense,
+          brokerageName,
+          listingBrokerage: property.isLauraListing ? null : property.listingBrokerage,
+          headline:        parsedCopy.headline,
+          body:            parsedCopy.body,
+          cta:             parsedCopy.cta,
+        });
+        storageKey = result.storageKey;
+      }
+      assetType = "print_pdf";
+
+    // ── COPY (email / social / voicemail) ──────────────────────────────────
+    // Note: postcard and mailer WITHOUT assetType "print_pdf" also route here
+    // (e.g. a copy-only override item).  print_pdf is excluded by the branch
+    // above.
+    } else if (
+      task.assetType === "email_html" || task.channel === "email" ||
+      task.channel === "instagram_post" || task.channel === "instagram_story" ||
+      task.channel === "postcard" || task.channel === "mailer" ||
+      task.channel === "voicemail"
+    ) {
+      const copyChannel: CopyChannel =
+        task.assetType === "email_html" ? "email"
+        : task.channel as CopyChannel;
+      const result = await generateCampaignCopy(copyChannel, facts);
+      textContent  = result.raw;
+      storageKey   = result.storageKey;
+      assetType    = task.assetType ?? "script_txt";
 
     } else {
-      res.status(422).json({ error: `No generator for channel "${task.channel}" / assetType "${task.assetType ?? "none"}"` });
+      res.status(422).json({
+        error: `No generator for channel "${task.channel}" / assetType "${task.assetType ?? "none"}"`,
+      });
       return;
     }
   } catch (err: unknown) {
