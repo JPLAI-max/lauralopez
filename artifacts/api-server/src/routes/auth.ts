@@ -1,15 +1,22 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import argon2 from "argon2";
-import { generateSecret, generateURI, verifySync as totpVerify } from "otplib";
+import { generateSecret, generateURI, verifySync as _totpVerify } from "otplib";
+
+// otplib's top-level VerifyResult is TOTPResult | HOTPResult, so .timeStep isn't on the
+// union after narrowing. We only ever call this with TOTP secrets, so we use the narrower type.
+type TotpValidResult = { valid: true; timeStep: number; delta: number; epoch: number };
+type TotpVerifyResult = TotpValidResult | { valid: false };
+function totpVerify(opts: { token: string; secret: string }): TotpVerifyResult {
+  return _totpVerify(opts) as TotpVerifyResult;
+}
 import { db, usersTable, sessionsTable, authEventsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import { z } from "zod";
 import { encryptTotpSecret, decryptTotpSecret } from "../lib/crypto";
 import {
   setSessionCookie,
   clearSessionCookie,
   requireAuth,
-  requireTotpEnrolled,
   hashIpForAuth,
 } from "../middlewares/requireAuth";
 import { logger } from "../lib/logger";
@@ -18,8 +25,10 @@ import { logger } from "../lib/logger";
 // Rate limiting — in-memory, per email AND per IP
 // ---------------------------------------------------------------------------
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const MAX_PER_EMAIL = 5;
+const MAX_PER_EMAIL_DEFAULT = 5;  // for unknown IPs
+const MAX_PER_EMAIL_KNOWN_IP = 10; // for IPs with a successful login in last 30 days
 const MAX_PER_IP = 20;
+const KNOWN_IP_WINDOW_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 const emailAttempts = new Map<string, number[]>();
 const ipAttempts = new Map<string, number[]>();
@@ -41,10 +50,43 @@ function recordAttempt(map: Map<string, number[]>, key: string): void {
   map.set(key, times);
 }
 
-function isLoginRateLimited(email: string, ip: string): boolean {
+/**
+ * Returns the per-email limit for this IP.
+ * Known IPs (successful login for this email in last 30 days) get a higher limit
+ * so an attacker who knows the email can't lock out the real user from their own IP.
+ */
+async function getEmailLimit(email: string, ipHash: string): Promise<number> {
+  try {
+    const cutoff = new Date(Date.now() - KNOWN_IP_WINDOW_MS);
+    const rows = await db
+      .select({ id: authEventsTable.id })
+      .from(authEventsTable)
+      .where(
+        and(
+          eq(authEventsTable.email, email),
+          eq(authEventsTable.ipHash, ipHash),
+          eq(authEventsTable.action, "login"),
+          eq(authEventsTable.success, true),
+          gt(authEventsTable.createdAt, cutoff),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0 ? MAX_PER_EMAIL_KNOWN_IP : MAX_PER_EMAIL_DEFAULT;
+  } catch {
+    return MAX_PER_EMAIL_DEFAULT;
+  }
+}
+
+async function checkLoginRateLimit(
+  email: string,
+  rawIp: string,
+  ipHash: string,
+): Promise<boolean> {
   const byEmail = pruneWindow(emailAttempts, email);
-  const byIp = pruneWindow(ipAttempts, ip);
-  return byEmail.length >= MAX_PER_EMAIL || byIp.length >= MAX_PER_IP;
+  const byIp = pruneWindow(ipAttempts, rawIp);
+  if (byIp.length >= MAX_PER_IP) return true;
+  const emailLimit = await getEmailLimit(email, ipHash);
+  return byEmail.length >= emailLimit;
 }
 
 const sweepLogin = setInterval(() => {
@@ -61,14 +103,12 @@ sweepLogin.unref();
 // ---------------------------------------------------------------------------
 // DUMMY hash — used when email not found to prevent timing-based enumeration
 // ---------------------------------------------------------------------------
-// Pre-computed at module load so the first "unknown email" response isn't slow
 let _dummyHash: string | null = null;
 async function getDummyHash(): Promise<string> {
   if (_dummyHash) return _dummyHash;
   _dummyHash = await argon2.hash("dummy-password-for-timing-parity-v1");
   return _dummyHash;
 }
-// Kick it off immediately in the background
 getDummyHash().catch(() => {});
 
 // ---------------------------------------------------------------------------
@@ -97,6 +137,8 @@ function clearPendingCookie(res: Response): void {
 async function logAuthEvent(opts: {
   userId?: string | null;
   email: string;
+  // Documented actions: password_fail | password_ok | totp_fail | totp_replay |
+  //   totp_enrolled | login | logout | session_expired | rate_limited
   action: string;
   success: boolean;
   ipHash?: string | null;
@@ -137,8 +179,6 @@ const TotpCodeBody = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// SESSION_DURATION for creating sessions
-// ---------------------------------------------------------------------------
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
@@ -159,8 +199,9 @@ router.post("/auth/login", async (req: Request, res: Response): Promise<void> =>
   const ipHash = hashIpForAuth(rawIp);
   const ua = req.headers["user-agent"] ?? null;
 
-  if (isLoginRateLimited(email, rawIp)) {
-    await logAuthEvent({ email, action: "login", success: false, ipHash, userAgent: ua });
+  if (await checkLoginRateLimit(email, rawIp, ipHash)) {
+    // Log the lockout attempt so it is visible in the audit log
+    await logAuthEvent({ email, action: "rate_limited", success: false, ipHash, userAgent: ua });
     res.status(429).json({ error: "Too many login attempts. Try again later." });
     return;
   }
@@ -195,15 +236,14 @@ router.post("/auth/login", async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  // Password verified — set pending cookie, require TOTP
+  // Password verified — set pending cookie, require TOTP next.
+  // Log "password_ok" (not "login" — the user is not authenticated yet).
   setPendingCookie(res, user.id);
-
-  const requiresTotpSetup = !user.totpEnabled;
-  await logAuthEvent({ userId: user.id, email, action: "login", success: true, ipHash, userAgent: ua });
+  await logAuthEvent({ userId: user.id, email, action: "password_ok", success: true, ipHash, userAgent: ua });
 
   res.json({
     requiresTotp: user.totpEnabled,
-    requiresTotpSetup,
+    requiresTotpSetup: !user.totpEnabled,
   });
 });
 
@@ -242,12 +282,27 @@ router.post("/auth/verify-totp", async (req: Request, res: Response): Promise<vo
     return;
   }
 
-  const isValid = totpVerify({ token: parsed.data.code, secret });
-  if (!isValid) {
+  // FIX 1: verifySync returns a VerifyResult object — check .valid, not the object itself
+  const result = totpVerify({ token: parsed.data.code, secret });
+
+  if (!result.valid) {
     await logAuthEvent({ userId: user.id, email: user.email, action: "totp_fail", success: false, ipHash, userAgent: ua });
     res.status(401).json({ error: "Invalid TOTP code" });
     return;
   }
+
+  // FIX 2: Replay protection — reject if this time-step was already used
+  if (user.lastTotpEpoch !== null && result.timeStep <= user.lastTotpEpoch) {
+    await logAuthEvent({ userId: user.id, email: user.email, action: "totp_replay", success: false, ipHash, userAgent: ua });
+    res.status(401).json({ error: "TOTP code already used. Wait for a new code." });
+    return;
+  }
+
+  // Update lastTotpEpoch to prevent replay of this code
+  await db
+    .update(usersTable)
+    .set({ lastTotpEpoch: result.timeStep })
+    .where(eq(usersTable.id, user.id));
 
   // Issue full session
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
@@ -261,6 +316,7 @@ router.post("/auth/verify-totp", async (req: Request, res: Response): Promise<vo
   clearPendingCookie(res);
   setSessionCookie(res, session.id);
 
+  // FIX 3: "login" success is logged here — after the session is issued — not at password_ok
   await logAuthEvent({ userId: user.id, email: user.email, action: "login", success: true, ipHash, userAgent: ua });
   res.json({ ok: true });
 });
@@ -321,7 +377,10 @@ router.post("/auth/totp/enroll", async (req: Request, res: Response): Promise<vo
   const encrypted = encryptTotpSecret(secret);
 
   // Store encrypted secret but leave totpEnabled=false until confirmed
-  await db.update(usersTable).set({ totpSecret: encrypted }).where(eq(usersTable.id, user.id));
+  await db
+    .update(usersTable)
+    .set({ totpSecret: encrypted, lastTotpEpoch: null })
+    .where(eq(usersTable.id, user.id));
 
   const otpauthUrl = generateURI({ issuer: "Laura Lopez Admin", label: user.email, secret });
 
@@ -358,18 +417,22 @@ router.post("/auth/totp/confirm", async (req: Request, res: Response): Promise<v
     return;
   }
 
-  const isValid = totpVerify({ token: parsed.data.code, secret });
-  if (!isValid) {
+  // FIX 1: Check .valid, not the object itself
+  const result = totpVerify({ token: parsed.data.code, secret });
+  if (!result.valid) {
     res.status(401).json({ error: "Invalid TOTP code" });
     return;
   }
 
-  // Mark enrolled
-  await db.update(usersTable).set({ totpEnabled: true }).where(eq(usersTable.id, user.id));
-
   const rawIp = getClientIp(req);
   const ipHash = hashIpForAuth(rawIp);
   const ua = req.headers["user-agent"] ?? null;
+
+  // Mark enrolled and record lastTotpEpoch so the enrollment code cannot be replayed
+  await db
+    .update(usersTable)
+    .set({ totpEnabled: true, lastTotpEpoch: result.timeStep })
+    .where(eq(usersTable.id, user.id));
 
   await logAuthEvent({
     userId: user.id,
@@ -380,7 +443,7 @@ router.post("/auth/totp/confirm", async (req: Request, res: Response): Promise<v
     userAgent: ua,
   });
 
-  // Issue full session now that TOTP is enrolled
+  // Issue full session
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const [session] = await db
     .insert(sessionsTable)

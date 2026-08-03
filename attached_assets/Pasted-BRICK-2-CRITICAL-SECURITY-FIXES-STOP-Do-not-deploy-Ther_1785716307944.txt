@@ -1,0 +1,86 @@
+BRICK 2 — CRITICAL SECURITY FIXES
+
+STOP. Do not deploy. There is an authentication bypass.
+
+────────────────────────────────────────
+1. CRITICAL — TOTP VERIFICATION IS BYPASSED
+────────────────────────────────────────
+otplib v13's verifySync() returns an OBJECT, not a boolean:
+  valid token   -> { valid: true,  delta: 0, ... }
+  invalid token -> { valid: false }
+
+Objects are always truthy, so `if (!isValid)` NEVER fires. Every
+six-digit code currently passes.
+
+Fix in /auth/verify-totp:
+  const result = totpVerify({ token: parsed.data.code, secret });
+  if (!result.valid) { ...reject... }
+
+Apply the SAME fix in /auth/totp/confirm — verify it has the
+identical bug and correct it.
+
+Then grep the entire codebase for any other otplib call and
+confirm each one reads the .valid property rather than testing
+the object.
+
+────────────────────────────────────────
+2. TOTP REPLAY PROTECTION
+────────────────────────────────────────
+Add to users table:
+  lastTotpEpoch  integer nullable
+
+verifySync returns { valid, delta, epoch, timeStep }. On a
+successful verify, compare the returned timeStep against
+user.lastTotpEpoch. If it is less than or equal to the stored
+value, REJECT as a replay and log a totp_replay auth event.
+Otherwise store the new timeStep and proceed.
+
+────────────────────────────────────────
+3. AUDIT LOG ACCURACY
+────────────────────────────────────────
+In /auth/login, the event written after password verification
+currently uses action "login" with success true. That is wrong —
+the user is not logged in yet.
+
+Change it to action "password_ok", success true.
+
+Reserve action "login" + success true for the point in
+/auth/verify-totp AFTER the session row is created and the
+cookie is set. There must be exactly one login/success event per
+completed authentication.
+
+Add "password_ok" and "totp_replay" to the documented action
+list in the schema comment.
+
+────────────────────────────────────────
+4. ACCOUNT LOCKOUT VECTOR
+────────────────────────────────────────
+Per-email rate limiting lets anyone who knows the admin email
+lock the account out indefinitely.
+
+Keep the per-email limit but add: if the request IP has a
+successful login for that email in the last 30 days (match on
+ipHash in auth_events), raise the limit to 10 and do not
+hard-block. Unknown IPs keep the strict limit of 5.
+
+Log every rate-limit block to auth_events so a lockout attempt
+is visible rather than silent.
+
+────────────────────────────────────────
+ACCEPTANCE — these must be tested for real
+────────────────────────────────────────
+1. Enroll TOTP. Attempt login with code "000000" -> MUST be
+   rejected with 401. Paste the actual response.
+2. Attempt with "123456" -> rejected.
+3. Attempt with a valid code from an authenticator app ->
+   accepted, session issued.
+4. Immediately reuse that SAME valid code -> rejected as replay,
+   totp_replay event written.
+5. Password correct + TOTP wrong -> auth_events shows
+   password_ok success AND totp_fail, and NO login success row.
+6. Full successful login -> exactly ONE login success row.
+7. Confirm no other otplib call site tests the object directly.
+
+For checks 1 and 2, paste the literal HTTP status and body. Do
+not summarise. The previous acceptance run reported this feature
+as passing while it was fully bypassed, so evidence is required.

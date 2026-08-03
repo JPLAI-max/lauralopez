@@ -4,6 +4,7 @@ import {
   uuid,
   timestamp,
   boolean,
+  integer,
   index,
 } from "drizzle-orm/pg-core";
 
@@ -18,6 +19,7 @@ export const usersTable = pgTable("users", {
   role: text("role").notNull().default("admin"), // admin | staff
   totpSecret: text("totp_secret"), // AES-256-GCM encrypted; null until enrolled
   totpEnabled: boolean("totp_enabled").notNull().default(false),
+  lastTotpEpoch: integer("last_totp_epoch"), // TOTP time-step used on last successful verify; null until first use
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   disabledAt: timestamp("disabled_at", { withTimezone: true }),
@@ -56,7 +58,7 @@ export const authEventsTable = pgTable("auth_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id"), // nullable — may not exist for unknown email attempts
   email: text("email").notNull(),
-  action: text("action").notNull(), // login | logout | totp_fail | password_fail | totp_enrolled | session_expired
+  action: text("action").notNull(), // password_fail | password_ok | totp_fail | totp_replay | totp_enrolled | login | logout | session_expired | rate_limited
   success: boolean("success").notNull(),
   ipHash: text("ip_hash"),
   userAgent: text("user_agent"),

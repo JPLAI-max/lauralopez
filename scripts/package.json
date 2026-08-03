@@ -7,6 +7,7 @@
     "hello": "tsx ./src/hello.ts",
     "seed-admin": "tsx ./src/seed-admin.ts",
     "test-auth": "tsx ./src/test-auth.ts",
+    "test-security": "tsx ./src/test-security-fixes.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
