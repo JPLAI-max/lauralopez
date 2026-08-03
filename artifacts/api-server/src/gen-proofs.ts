@@ -13,9 +13,9 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { db, marketingTemplatesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
-import { generateMarketingImage } from "./lib/campaign-marketing-gen";
+import { db, marketingTemplatesTable, propertiesTable } from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
+import { generateMarketingImage, extractStreet } from "./lib/campaign-marketing-gen";
 import type { MarketingGenInput } from "./lib/campaign-marketing-gen";
 import type { MarketingTemplate } from "@workspace/db";
 
@@ -46,13 +46,16 @@ function save(filename: string, buf: Buffer): void {
   console.log(`  ✓ ${filename}  (${(buf.length / 1024).toFixed(0)} KB)`);
 }
 
+/** Load the latest active version of a template by key. */
 async function loadTemplate(key: string): Promise<MarketingTemplate> {
-  const [row] = await db
+  const rows = await db
     .select()
     .from(marketingTemplatesTable)
-    .where(and(eq(marketingTemplatesTable.key, key), eq(marketingTemplatesTable.version, 1)))
+    .where(and(eq(marketingTemplatesTable.key, key), eq(marketingTemplatesTable.isActive, true)))
+    .orderBy(desc(marketingTemplatesTable.version))
     .limit(1);
-  if (!row) throw new Error(`Template "${key}" v1 not found in DB — run seed-marketing-templates first`);
+  const row = rows[0];
+  if (!row) throw new Error(`Template "${key}" (active) not found in DB — run seed-marketing-templates first`);
   return row;
 }
 
@@ -122,10 +125,11 @@ async function run() {
   const topPick1 = readPublicImage("top-pick-1.png");          // 1408×768 wide
   const topPick2 = readPublicImage("top-pick-2.png");          // 1408×768
 
-  // ── Base fields ────────────────────────────────────────────────────────────
+  // ── Base fields — address uses extractStreet (street line only) ────────────
+  const FULL_ADDRESS = "412 N Mapleton Dr, Beverly Hills, CA 90210";
   const baseFields = {
     headline:      "JUST SOLD",
-    address:       "412 N Mapleton Dr, Beverly Hills, CA 90210",
+    address:       extractStreet(FULL_ADDRESS),   // "412 N Mapleton Dr"
     city:          "Beverly Hills",
     price:         "$18,500,000",
     roleLine:      "LISTED BY",
@@ -237,6 +241,29 @@ async function run() {
     save("focal-right.png", resultRight.pngBuffer);
 
     console.log("    (focal-left crops warm zone; focal-right crops cool zone)");
+  }
+
+  // ── Brick 5.2b — long-address.png (longest seeded property street) ────────
+  {
+    // Query all properties, find longest address (extractStreet applied)
+    const allProps = await db
+      .select({ address: propertiesTable.address })
+      .from(propertiesTable);
+    const longestFull = allProps
+      .map((p) => p.address)
+      .sort((a, b) => extractStreet(b).length - extractStreet(a).length)[0] ?? FULL_ADDRESS;
+    const longestStreet = extractStreet(longestFull);
+    console.log(`  ▸ Longest seeded street: "${longestStreet}" (${longestStreet.length} chars)`);
+
+    const result = await generateMarketingImage(
+      makeInput(storyJustSold, topPick1, 1408, 768, {
+        ...baseFields,
+        address:  longestStreet,
+        headline: "JUST SOLD",
+      })
+    );
+    save("long-address.png", result.pngBuffer);
+    console.log(`    Address rendered at fit-to-width — no canvas overflow`);
   }
 
   // ── Acceptance #7 — font note (structural, not runnable here) ─────────────

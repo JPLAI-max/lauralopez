@@ -1,0 +1,67 @@
+BRICK 5.2b — TEMPLATE RENDER CORRECTIONS
+
+Rendering pipeline works. These are geometry and data fixes.
+Do not change the scrim approach, font loading, or focal crop.
+
+1. ADDRESS FIELD IS STREET ONLY — highest priority
+   The address layer is receiving the full address with city,
+   state, and ZIP. It overflows the canvas and is clipped on
+   both sides, and it duplicates the city already shown in the
+   subline directly below.
+
+   Feed the address layer the STREET LINE ONLY — e.g.
+   "12 N MAPLETON DR", not "12 N MAPLETON DR, BEVERLY HILLS,
+   CA 90210". Parse it off the properties.address field: take
+   everything before the first comma. If there is no comma, use
+   the whole string.
+
+2. FIT-TO-WIDTH ON ALL TEXT LAYERS
+   No text layer may EVER exceed 84% of canvas width. Measure
+   the rendered width and step the font size down in 2px
+   decrements until it fits, to a floor of 60% of the specified
+   size. Apply to headline, address, and subline.
+
+   Clipping at the canvas edge is never acceptable output.
+   Enforce this in the renderer, not per-template.
+
+3. HEADLINE MAX WIDTH
+   Replace the 18-character rule with a width rule: shrink from
+   72px until the headline fits 84% of canvas width, floor 52px.
+   Still never wrap to two lines. Character counts are a poor
+   proxy — "SPECTACULAR VIEW ESTATES" is 24 chars and nearly
+   spans the full canvas.
+
+4. RULE SPACING
+   The divider currently overlaps the address ascenders. Move
+   the rule to y 17.2% and the address to y 20.2%. Subline
+   moves to 22.6%. Verify visible clear space above and below
+   the rule.
+
+5. BOTTOM SCRIM STRENGTH
+   Increase the bottom gradient: start at 72% of height instead
+   of 78%, and end opacity 0.55 instead of 0.42. The signature
+   block must stay legible over a bright subject — test against
+   the sunset photo with the pool reflection.
+
+6. SIGNATURE BLOCK SPACING
+   Increase separation: brokerageMark y 87.5%, roleLine y 91.0%,
+   agentName y 94.2%. The three lines currently read as one
+   compressed block.
+
+7. RE-RENDER AND COMMIT
+   Regenerate all six preview PNGs with these corrections and
+   commit them to /docs/template-previews/, overwriting the
+   existing files.
+
+   Add one more: render with the LONGEST street address in the
+   seeded properties and save as
+   /docs/template-previews/long-address.png to prove fit-to-width
+   holds.
+
+ACCEPTANCE
+1. No text touches or crosses the canvas edge in ANY preview.
+2. Address line shows street only, no city or ZIP.
+3. Visible clear space above and below the rule.
+4. Signature legible over the bright pool area of the sunset
+   photo.
+5. All seven PNGs committed.

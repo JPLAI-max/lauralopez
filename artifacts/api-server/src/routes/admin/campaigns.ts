@@ -20,6 +20,7 @@ import {
   generateInstagramCaption,
   selectBestPhoto,
   extractCity,
+  extractStreet,
   type GalleryEntry,
 } from "../../lib/campaign-marketing-gen";
 
@@ -658,7 +659,7 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
 
         const fields = {
           headline,
-          address:       property.address,
+          address:       extractStreet(property.address),
           city,
           price:         priceStr ?? "",
           roleLine:      "LISTED BY",

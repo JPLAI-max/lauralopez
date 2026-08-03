@@ -22,6 +22,17 @@ import { and, eq } from "drizzle-orm";
 
 type Layer = Record<string, unknown>;
 
+// ---------------------------------------------------------------------------
+// v2 geometry corrections (Brick 5.2b):
+//   - Bottom scrim: 72→100% at 0.55 opacity (was 78→100% at 0.42)
+//   - Rule: y 17.2% (was 16.8%)
+//   - Address: y 20.2% (was 19.0%)
+//   - Subline: y 22.6% (was 21.5%)
+//   - Wordmark: y 87.5% (was 88.5%)
+//   - roleLine: y 91.0% (was 91.5%)
+//   - agentName: y 94.2% (was 94.0%)
+// ---------------------------------------------------------------------------
+
 /** Story (1080×1920) — headline y-positions as fraction of canvas height */
 const STORY_LAYERS_BASE: Layer[] = [
   { type: "photo" },
@@ -30,8 +41,10 @@ const STORY_LAYERS_BASE: Layer[] = [
     fromYPct: 0, toYPct: 0.34, maxOpacity: 0.32,
   },
   {
+    // bottom scrim starts earlier and is stronger to keep signature legible
+    // over bright subjects (pools, sunset sky in lower frame)
     type: "scrim", position: "bottom",
-    fromYPct: 0.78, toYPct: 1.0, maxOpacity: 0.42,
+    fromYPct: 0.72, toYPct: 1.0, maxOpacity: 0.55,
   },
   // headline block
   {
@@ -41,23 +54,23 @@ const STORY_LAYERS_BASE: Layer[] = [
   },
   {
     type: "rule",
-    yPct: 0.168, widthPx: 120, heightPx: 1, opacity: 0.70,
+    yPct: 0.172, widthPx: 120, heightPx: 1, opacity: 0.70,
   },
   {
     type: "text", field: "address",
-    yPct: 0.190, fontSize: 34,
+    yPct: 0.202, fontSize: 34,
     fontWeight: 400, trackingEm: 0.18, anchor: "center",
   },
-  // signature block
-  { type: "wordmark", yPct: 0.885, widthPct: 0.36 },
+  // signature block — wider spacing so the three lines don't compress
+  { type: "wordmark", yPct: 0.875, widthPct: 0.36 },
   {
     type: "text", field: "roleLine",
-    yPct: 0.915, fontSize: 21,
+    yPct: 0.910, fontSize: 21,
     fontWeight: 300, trackingEm: 0.20, anchor: "center",
   },
   {
     type: "text", field: "agentName",
-    yPct: 0.940, fontSize: 22,
+    yPct: 0.942, fontSize: 22,
     fontWeight: 400, trackingEm: 0.16, anchor: "center",
   },
 ];
@@ -65,12 +78,12 @@ const STORY_LAYERS_BASE: Layer[] = [
 /** Subline layer variants */
 const SUBLINE_CITY_PRICE: Layer = {
   type: "text", format: "{city} | LP {price}",
-  yPct: 0.215, fontSize: 26,
+  yPct: 0.226, fontSize: 26,
   fontWeight: 300, trackingEm: 0.14, anchor: "center",
 };
 const SUBLINE_CITY_ONLY: Layer = {
   type: "text", format: "{city}",
-  yPct: 0.215, fontSize: 26,
+  yPct: 0.226, fontSize: 26,
   fontWeight: 300, trackingEm: 0.14, anchor: "center",
 };
 
@@ -122,35 +135,35 @@ const POST_ASPECT  = "1.0000"; // 1:1
 const TEMPLATES: TemplateSeed[] = [
   // ── STORY variants ────────────────────────────────────────────────────────
   {
-    key: "story.just_sold", name: "Story — Just Sold", channel: "instagram_story", version: 1,
+    key: "story.just_sold", name: "Story — Just Sold", channel: "instagram_story", version: 2,
     canvasWidth: 1080, canvasHeight: 1920,
     definition: storyLayers(SUBLINE_CITY_PRICE),
     requiredFields: REQUIRED_PRICE,
     photoAspect: STORY_ASPECT,
   },
   {
-    key: "story.just_listed", name: "Story — Just Listed", channel: "instagram_story", version: 1,
+    key: "story.just_listed", name: "Story — Just Listed", channel: "instagram_story", version: 2,
     canvasWidth: 1080, canvasHeight: 1920,
     definition: storyLayers(SUBLINE_CITY_PRICE),
     requiredFields: REQUIRED_PRICE,
     photoAspect: STORY_ASPECT,
   },
   {
-    key: "story.open_house", name: "Story — Open House", channel: "instagram_story", version: 1,
+    key: "story.open_house", name: "Story — Open House", channel: "instagram_story", version: 2,
     canvasWidth: 1080, canvasHeight: 1920,
     definition: storyLayers(SUBLINE_CITY_ONLY),
     requiredFields: REQUIRED_CITY,
     photoAspect: STORY_ASPECT,
   },
   {
-    key: "story.price_improved", name: "Story — Price Improved", channel: "instagram_story", version: 1,
+    key: "story.price_improved", name: "Story — Price Improved", channel: "instagram_story", version: 2,
     canvasWidth: 1080, canvasHeight: 1920,
     definition: storyLayers(SUBLINE_CITY_PRICE),
     requiredFields: REQUIRED_PRICE,
     photoAspect: STORY_ASPECT,
   },
   {
-    key: "story.in_escrow", name: "Story — In Escrow", channel: "instagram_story", version: 1,
+    key: "story.in_escrow", name: "Story — In Escrow", channel: "instagram_story", version: 2,
     canvasWidth: 1080, canvasHeight: 1920,
     definition: storyLayers(SUBLINE_CITY_ONLY),
     requiredFields: REQUIRED_CITY,
@@ -159,35 +172,35 @@ const TEMPLATES: TemplateSeed[] = [
 
   // ── POST variants (same geometry, 12% smaller type) ─────────────────────
   {
-    key: "post.just_sold", name: "Post — Just Sold", channel: "instagram_post", version: 1,
+    key: "post.just_sold", name: "Post — Just Sold", channel: "instagram_post", version: 2,
     canvasWidth: 1080, canvasHeight: 1080,
     definition: postLayers(SUBLINE_CITY_PRICE),
     requiredFields: REQUIRED_PRICE,
     photoAspect: POST_ASPECT,
   },
   {
-    key: "post.just_listed", name: "Post — Just Listed", channel: "instagram_post", version: 1,
+    key: "post.just_listed", name: "Post — Just Listed", channel: "instagram_post", version: 2,
     canvasWidth: 1080, canvasHeight: 1080,
     definition: postLayers(SUBLINE_CITY_PRICE),
     requiredFields: REQUIRED_PRICE,
     photoAspect: POST_ASPECT,
   },
   {
-    key: "post.open_house", name: "Post — Open House", channel: "instagram_post", version: 1,
+    key: "post.open_house", name: "Post — Open House", channel: "instagram_post", version: 2,
     canvasWidth: 1080, canvasHeight: 1080,
     definition: postLayers(SUBLINE_CITY_ONLY),
     requiredFields: REQUIRED_CITY,
     photoAspect: POST_ASPECT,
   },
   {
-    key: "post.price_improved", name: "Post — Price Improved", channel: "instagram_post", version: 1,
+    key: "post.price_improved", name: "Post — Price Improved", channel: "instagram_post", version: 2,
     canvasWidth: 1080, canvasHeight: 1080,
     definition: postLayers(SUBLINE_CITY_PRICE),
     requiredFields: REQUIRED_PRICE,
     photoAspect: POST_ASPECT,
   },
   {
-    key: "post.in_escrow", name: "Post — In Escrow", channel: "instagram_post", version: 1,
+    key: "post.in_escrow", name: "Post — In Escrow", channel: "instagram_post", version: 2,
     canvasWidth: 1080, canvasHeight: 1080,
     definition: postLayers(SUBLINE_CITY_ONLY),
     requiredFields: REQUIRED_CITY,
@@ -236,6 +249,25 @@ async function run() {
     });
     console.log(`  ✓ seeded ${t.key} v${t.version}`);
     inserted++;
+
+    // Deactivate the previous version (v1) so the new version is the only
+    // active row for this key.  Per spec, old rows are never deleted — only
+    // marked inactive — so any campaign_assets referencing v1 stay valid.
+    const prevVersion = t.version - 1;
+    if (prevVersion >= 1) {
+      const deactivated = await db
+        .update(marketingTemplatesTable)
+        .set({ isActive: false })
+        .where(
+          and(
+            eq(marketingTemplatesTable.key,      t.key),
+            eq(marketingTemplatesTable.version,  prevVersion),
+            eq(marketingTemplatesTable.isActive, true),
+          ),
+        );
+      void deactivated; // result not needed; drizzle update returns metadata
+      console.log(`  ↓ deactivated ${t.key} v${prevVersion}`);
+    }
   }
 
   console.log(`✅ Done — ${inserted} inserted, ${skipped} skipped.`);

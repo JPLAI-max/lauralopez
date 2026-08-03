@@ -306,10 +306,20 @@ function buildOverlaySvg(
       // Uppercase all story/post text per spec
       display = display.toUpperCase();
 
-      // Headline font-size fallback for long text
+      // Fit-to-width: step font size down in 2px increments until the estimated
+      // rendered width fits within 84% of the canvas width.
+      // Headline layers (those that declare maxCharsNormal or fontSizeLong) use a
+      // spec-defined floor of 52px; all other layers use 60% of their specified size.
+      // Cormorant display caps are approximately 0.62em wide; add letter-spacing per char.
+      const isHeadline = layer.maxCharsNormal !== undefined || layer.fontSizeLong !== undefined;
+      const sizeFloor  = isHeadline ? 52 : Math.round(layer.fontSize * 0.60);
+      const maxWidthPx = Math.round(w * 0.84);
+      const CAP_WIDTH  = 0.62; // Cormorant Garamond capital em-width
       let fontSize = layer.fontSize;
-      if (layer.maxCharsNormal && layer.fontSizeLong && display.length > layer.maxCharsNormal) {
-        fontSize = layer.fontSizeLong;
+      while (fontSize > sizeFloor) {
+        const estW = display.length * fontSize * (CAP_WIDTH + layer.trackingEm);
+        if (estW <= maxWidthPx) break;
+        fontSize = Math.max(sizeFloor, fontSize - 2);
       }
 
       const letterSpacing = (layer.trackingEm * fontSize).toFixed(2);
@@ -441,6 +451,16 @@ export function selectBestPhoto(
       const db = Math.abs(parseFloat(b.aspectRatio) - targetAspect);
       return da - db;
     })[0] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Street extraction — everything before the first comma.
+// "412 N Mapleton Dr, Beverly Hills, CA 90210" → "412 N Mapleton Dr"
+// If there is no comma the whole string is returned.
+// ---------------------------------------------------------------------------
+export function extractStreet(address: string): string {
+  const commaIdx = address.indexOf(",");
+  return commaIdx >= 0 ? address.slice(0, commaIdx).trim() : address.trim();
 }
 
 // ---------------------------------------------------------------------------

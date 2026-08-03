@@ -11,6 +11,7 @@ import {
   generateMarketingImage,
   selectBestPhoto,
   extractCity,
+  extractStreet,
   type GalleryEntry,
 } from "../../lib/campaign-marketing-gen";
 import { getObjectBuffer } from "../../lib/storage";
@@ -120,7 +121,7 @@ router.post("/:id/preview", async (req: Request, res: Response): Promise<void> =
   const city     = extractCity(property.address);
   const fields   = {
     headline,
-    address:       property.address,
+    address:       extractStreet(property.address),
     city,
     price:         priceStr,
     roleLine,
