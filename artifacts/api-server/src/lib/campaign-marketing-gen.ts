@@ -249,16 +249,25 @@ function buildOverlaySvg(
       const rectH = Math.round((layer.toYPct - layer.fromYPct) * h);
       const op    = layer.maxOpacity;
       if (layer.position === "top") {
+        // Top scrim: linear fade-out — natural because sky dissolves at the horizon
         gradDefs.push(`
     <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="black" stop-opacity="${op}"/>
       <stop offset="100%" stop-color="black" stop-opacity="0"/>
     </linearGradient>`);
       } else {
+        // Bottom scrim: quadratic ease-in (opacity = maxOpacity × t²) so the
+        // gradient reads as natural darkening rather than a visible band edge.
+        // Six stops give a smooth enough curve without excessive SVG bloat.
+        const easedStops = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+          .map((t) => {
+            const eased = (op * t * t).toFixed(3);
+            return `<stop offset="${(t * 100).toFixed(0)}%" stop-color="black" stop-opacity="${eased}"/>`;
+          })
+          .join("\n      ");
         gradDefs.push(`
     <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="black" stop-opacity="0"/>
-      <stop offset="100%" stop-color="black" stop-opacity="${op}"/>
+      ${easedStops}
     </linearGradient>`);
       }
       parts.push(`<rect x="0" y="${rectY}" width="${w}" height="${rectH}" fill="url(#${gid})"/>`);
