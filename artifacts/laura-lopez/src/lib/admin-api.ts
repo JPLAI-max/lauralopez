@@ -338,3 +338,187 @@ export interface CreateMilestoneRequest {
   notes?: string;
   sortOrder?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Content types
+// ---------------------------------------------------------------------------
+export type ArticleCategory = "neighborhood" | "regulatory" | "architecture" | "insurance" | "market";
+export type ArticleStatus = "draft" | "published";
+export type PropertyStatus = "pick" | "listed" | "sold";
+
+export interface AdminArticle {
+  id: string;
+  ownerId: string;
+  slug: string;
+  title: string;
+  category: ArticleCategory;
+  excerpt: string;
+  body: string;
+  heroMediaId: string | null;
+  status: ArticleStatus;
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminProperty {
+  id: string;
+  ownerId: string;
+  address: string;
+  neighborhood: string | null;
+  status: PropertyStatus;
+  listPrice: string | null;
+  soldPrice: string | null;
+  soldDate: string | null;
+  beds: string | null;
+  baths: string | null;
+  sqft: number | null;
+  lotSqft: number | null;
+  yearBuilt: number | null;
+  architect: string | null;
+  isLauraListing: boolean;
+  listingBrokerage: string | null;
+  commentary: string | null;
+  architectureNotes: string | null;
+  lotNotes: string | null;
+  valueNotes: string | null;
+  heroMediaId: string | null;
+  heroUrl?: string | null;
+  featured: boolean;
+  sortOrder: number;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+  gallery?: { mediaId: string; sortOrder: number }[];
+}
+
+export interface AdminMedia {
+  id: string;
+  ownerId: string;
+  storageKey: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  width: number;
+  height: number;
+  aspectRatio: string;
+  focalX: string;
+  focalY: string;
+  altText: string | null;
+  credit: string | null;
+  derivatives: Record<string, string>;
+  url: string | null;
+  createdAt: string;
+}
+
+export interface AdminSlot {
+  id: string;
+  slotKey: string;
+  label: string;
+  aspectRatio: string;
+  minWidth: number;
+  currentMediaId: string | null;
+  currentPropertyId: string | null;
+  assignedAt: string | null;
+  currentMedia: { id: string; filename: string; url: string | null } | null;
+}
+
+export interface SlotSuggestion extends AdminSlot {
+  currentThumbnail: string | null;
+}
+
+export interface PresignResponse {
+  uploadUrl: string;
+  storageKey: string;
+}
+
+/** Input type for create/patch — prices are numbers, not strings */
+export interface PropertyInput {
+  address?: string;
+  neighborhood?: string | null;
+  status?: PropertyStatus;
+  listPrice?: number | null;
+  soldPrice?: number | null;
+  soldDate?: string | null;
+  beds?: number | null;
+  baths?: number | null;
+  sqft?: number | null;
+  lotSqft?: number | null;
+  yearBuilt?: number | null;
+  architect?: string | null;
+  isLauraListing?: boolean;
+  listingBrokerage?: string | null;
+  commentary?: string | null;
+  architectureNotes?: string | null;
+  lotNotes?: string | null;
+  valueNotes?: string | null;
+  heroMediaId?: string | null;
+  featured?: boolean;
+  sortOrder?: number;
+  archived?: boolean;
+  gallery?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Content API client
+// ---------------------------------------------------------------------------
+export const contentApi = {
+  articles: {
+    list: (params?: { status?: string; category?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set("status", params.status);
+      if (params?.category) qs.set("category", params.category);
+      return apiFetch<{ articles: AdminArticle[] }>(`/admin/articles?${qs.toString()}`);
+    },
+    get: (id: string) => apiFetch<{ article: AdminArticle }>(`/admin/articles/${id}`),
+    create: (body: Partial<AdminArticle>) =>
+      apiFetch<{ article: AdminArticle }>("/admin/articles", { method: "POST", json: body }),
+    patch: (id: string, body: Partial<AdminArticle>) =>
+      apiFetch<{ article: AdminArticle }>(`/admin/articles/${id}`, { method: "PATCH", json: body }),
+    delete: (id: string) => apiFetch<{ ok: boolean }>(`/admin/articles/${id}`, { method: "DELETE" }),
+    slugCheck: (slug: string, excludeId?: string) => {
+      const qs = new URLSearchParams({ slug });
+      if (excludeId) qs.set("excludeId", excludeId);
+      return apiFetch<{ available: boolean; suggested: string }>(`/admin/articles/slug-check?${qs.toString()}`);
+    },
+  },
+
+  properties: {
+    list: () => apiFetch<{ properties: AdminProperty[] }>("/admin/properties"),
+    get: (id: string) => apiFetch<{ property: AdminProperty }>(`/admin/properties/${id}`),
+    create: (body: PropertyInput) =>
+      apiFetch<{ property: AdminProperty }>("/admin/properties", { method: "POST", json: body }),
+    patch: (id: string, body: PropertyInput) =>
+      apiFetch<{ property: AdminProperty }>(`/admin/properties/${id}`, { method: "PATCH", json: body }),
+    delete: (id: string) => apiFetch<{ property: AdminProperty }>(`/admin/properties/${id}`, { method: "DELETE" }),
+    addGallery: (id: string, mediaId: string) =>
+      apiFetch<{ row: unknown }>(`/admin/properties/${id}/gallery`, { method: "POST", json: { mediaId } }),
+    removeGallery: (id: string, mediaId: string) =>
+      apiFetch<{ ok: boolean }>(`/admin/properties/${id}/gallery/${mediaId}`, { method: "DELETE" }),
+  },
+
+  media: {
+    list: () => apiFetch<{ media: AdminMedia[] }>("/admin/media"),
+    get: (id: string) => apiFetch<{ media: AdminMedia }>(`/admin/media/${id}`),
+    presign: (body: { filename: string; mimeType: string; sizeBytes: number }) =>
+      apiFetch<PresignResponse>("/admin/media/presign", { method: "POST", json: body }),
+    complete: (body: { storageKey: string; filename: string; mimeType: string }) =>
+      apiFetch<{ media: AdminMedia }>("/admin/media/complete", { method: "POST", json: body }),
+    patch: (id: string, body: { focalX?: number; focalY?: number; altText?: string | null; credit?: string | null }) =>
+      apiFetch<{ media: AdminMedia }>(`/admin/media/${id}`, { method: "PATCH", json: body }),
+    delete: (id: string) => apiFetch<{ ok: boolean }>(`/admin/media/${id}`, { method: "DELETE" }),
+    slotSuggestions: (id: string) =>
+      apiFetch<{ suggestions: SlotSuggestion[] }>(`/admin/media/${id}/slot-suggestions`),
+  },
+
+  slots: {
+    list: () => apiFetch<{ slots: AdminSlot[] }>("/admin/slots"),
+    assign: (slotKey: string, mediaId: string, propertyId?: string) =>
+      apiFetch<{ slot: AdminSlot }>(`/admin/slots/${slotKey}/assign`, {
+        method: "POST",
+        json: { mediaId, propertyId },
+      }),
+    revert: (slotKey: string) =>
+      apiFetch<{ slot: AdminSlot }>(`/admin/slots/${slotKey}/revert`, { method: "POST" }),
+  },
+};

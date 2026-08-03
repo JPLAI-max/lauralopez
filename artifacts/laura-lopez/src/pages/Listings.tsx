@@ -1,4 +1,7 @@
 import { motion, type Variants } from "framer-motion";
+import { Link } from "wouter";
+import { useEffect, useState } from "react";
+import { publicApi, type PublicProperty, formatPrice, focalObjectPosition } from "../lib/public-api";
 
 const fadeUpVariant: Variants = {
   hidden: { opacity: 0, y: 30 },
@@ -6,149 +9,152 @@ const fadeUpVariant: Variants = {
 };
 
 const staggerContainer: Variants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.1 } },
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
-export interface Listing {
-  id: string;
-  address: string;
-  neighborhood: string;
-  price: string;
-  beds: number;
-  baths: number;
-  sqft: string;
-  imageUrl?: string;
-  status: "active";
-  propertyType?: string;
-  mlsId?: string;
-  url?: string;
-}
-
-const placeholderListings: Listing[] = [];
-
-function ListingCard({ listing }: { listing: Listing }) {
-  return (
-    <motion.div
-      variants={fadeUpVariant}
-      className="group cursor-pointer"
-      data-testid={`card-listing-${listing.id}`}
-    >
-      <a href={listing.url || "#"} target={listing.url ? "_blank" : undefined} rel="noreferrer">
-        <div className="aspect-[4/3] mb-5 overflow-hidden bg-card">
-          {listing.imageUrl ? (
-            <img
-              src={listing.imageUrl}
-              alt={listing.address}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-            />
-          ) : (
-            <div className="w-full h-full bg-card flex items-center justify-center">
-              <span className="font-sans text-xs tracking-widest uppercase text-muted-foreground">
-                Photo Pending
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="space-y-2">
-          <div className="flex justify-between items-start gap-4">
-            <h3 className="font-serif text-xl leading-snug text-foreground group-hover:text-primary transition-colors">
-              {listing.address}
-            </h3>
-            <span className="font-sans text-sm tracking-wider text-secondary shrink-0 pt-1">
-              {listing.price}
-            </span>
-          </div>
-          <p className="font-sans text-xs tracking-widest uppercase text-muted-foreground">
-            {listing.neighborhood}
-          </p>
-          <div className="flex gap-6 pt-1">
-            <span className="font-sans text-sm text-muted-foreground">
-              {listing.beds} BD
-            </span>
-            <span className="font-sans text-sm text-muted-foreground">
-              {listing.baths} BA
-            </span>
-            {listing.sqft && (
-              <span className="font-sans text-sm text-muted-foreground">
-                {listing.sqft} SF
-              </span>
-            )}
-          </div>
-        </div>
-      </a>
-    </motion.div>
-  );
-}
-
 export default function Listings() {
-  const hasListings = placeholderListings.length > 0;
+  const [listings, setListings] = useState<PublicProperty[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    publicApi.properties
+      .list({ status: "listed" })
+      .then((res) => setListings(res.properties))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
-    <div className="min-h-screen bg-background ">
-      <section className="py-20 border-b border-border">
-        <div className="container mx-auto px-6">
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={fadeUpVariant}
-            className="max-w-2xl"
-          >
-            <p className="font-sans text-xs tracking-widest uppercase text-primary/60 mb-4">
-              Beverly Hills Estates
-            </p>
-            <h1 className="font-serif text-[clamp(2.25rem,6vw,3.75rem)] text-foreground mb-6">
-              Current Listings
-            </h1>
-            <p className="font-serif text-xl text-muted-foreground leading-relaxed">
-              Active properties available through Laura Lopez and The Beverly Hills Estates.
+    <div className="w-full pb-24 bg-background">
+      <div className="container mx-auto px-6">
+        <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="max-w-7xl mx-auto">
+
+          <motion.div variants={fadeUpVariant} className="mb-20 text-center max-w-4xl mx-auto">
+            <h1 className="font-serif text-[clamp(2.25rem,6vw,3.75rem)] text-primary mb-6">Current Listings</h1>
+            <p className="font-serif text-xl text-foreground/80 leading-relaxed">
+              Properties currently represented by Laura Lopez and The Beverly Hills Estates.
             </p>
           </motion.div>
-        </div>
-      </section>
 
-      <section className="py-24">
-        <div className="container mx-auto px-6">
-          {hasListings ? (
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              variants={staggerContainer}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10"
-            >
-              {placeholderListings.map((listing) => (
-                <ListingCard key={listing.id} listing={listing} />
-              ))}
-            </motion.div>
-          ) : (
-            <motion.div
-              initial="hidden"
-              animate="visible"
-              variants={fadeUpVariant}
-              className="py-24 text-center"
-            >
-              <div className="max-w-lg mx-auto space-y-6">
-                <div className="w-16 h-px bg-secondary mx-auto" />
-                <h2 className="font-serif text-2xl text-foreground">
-                  Listings Coming Soon
-                </h2>
-                <p className="font-serif text-muted-foreground leading-relaxed">
-                  Laura's current active listings will appear here once connected to The Beverly Hills Estates portfolio. For immediate property inquiries, please request a private consultation.
-                </p>
-                <div className="pt-4">
-                  <a
-                    href="/contact"
-                    className="inline-block px-8 py-4 bg-primary text-primary-foreground font-sans text-sm tracking-wider uppercase hover:opacity-90 transition-opacity"
-                    data-testid="button-listings-cta"
-                  >
-                    Private Consultation
-                  </a>
+          {loading && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 lg:gap-16">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="aspect-[4/3] bg-muted mb-8" />
+                  <div className="h-4 bg-muted rounded mb-3 w-2/3" />
+                  <div className="h-8 bg-muted rounded mb-4 w-full" />
+                  <div className="h-4 bg-muted rounded w-full" />
                 </div>
-              </div>
+              ))}
+            </div>
+          )}
+
+          {!loading && (error || listings.length === 0) && (
+            <motion.div variants={fadeUpVariant} className="text-center py-32">
+              <p className="font-serif text-3xl text-primary mb-6">Listings Coming Soon</p>
+              <p className="font-serif text-xl text-foreground/80 mb-12 max-w-2xl mx-auto">
+                Properties in Beverly Hills, Bel Air, Holmby Hills, Trousdale Estates, and Beverly Park — available exclusively through Laura Lopez.
+              </p>
+              <Link
+                href="/contact"
+                className="inline-block px-10 py-4 border border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors font-sans uppercase tracking-widest text-xs"
+              >
+                Private Consultation
+              </Link>
             </motion.div>
           )}
-        </div>
-      </section>
+
+          {!loading && !error && listings.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 lg:gap-16">
+              {listings.map((listing) => {
+                const stats = [
+                  listing.beds && `${listing.beds} Beds`,
+                  listing.baths && `${listing.baths} Baths`,
+                  listing.sqft && `${listing.sqft.toLocaleString()} SF`,
+                  listing.lotSqft && `${(listing.lotSqft / 43560).toFixed(1)} Acres`,
+                ].filter(Boolean).join(" • ");
+
+                const imgStyle = {
+                  objectPosition: focalObjectPosition(listing.heroFocalX, listing.heroFocalY),
+                };
+
+                return (
+                  <motion.div key={listing.id} variants={fadeUpVariant} className="group">
+                    <div className="aspect-[4/3] bg-card mb-8 overflow-hidden">
+                      {listing.heroUrl ? (
+                        <img
+                          src={listing.heroUrl}
+                          srcSet={listing.heroSrcset ?? undefined}
+                          sizes="(max-width: 768px) 100vw, 50vw"
+                          alt={listing.heroAlt ?? listing.address}
+                          className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
+                          style={imgStyle}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-muted flex items-center justify-center">
+                          <span className="font-sans text-xs uppercase tracking-widest text-muted-foreground">No image</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-4">
+                      {listing.architect && (
+                        <span className="font-sans text-xs uppercase tracking-widest text-secondary block">
+                          {listing.architect}
+                        </span>
+                      )}
+                      <h3 className="font-serif text-3xl text-primary">{listing.address}</h3>
+                      {listing.neighborhood && listing.neighborhood !== listing.address && (
+                        <p className="font-sans text-sm text-muted-foreground uppercase tracking-wider">
+                          {listing.neighborhood}
+                        </p>
+                      )}
+
+                      <div className="w-12 h-px bg-border my-4" />
+
+                      {listing.commentary && (
+                        <p className="font-serif text-lg leading-relaxed text-foreground/80 italic">
+                          "{listing.commentary}"
+                        </p>
+                      )}
+
+                      {!listing.isLauraListing && listing.listingBrokerage && (
+                        <p className="font-sans text-xs text-muted-foreground">
+                          Listing brokerage: {listing.listingBrokerage}
+                        </p>
+                      )}
+
+                      <div className="pt-6 border-t border-border flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                        <div>
+                          {stats && (
+                            <span className="font-sans text-sm tracking-wider uppercase block text-muted-foreground">
+                              {stats}
+                            </span>
+                          )}
+                          {listing.listPrice && (
+                            <span className="font-sans text-sm tracking-wider uppercase block font-medium mt-1">
+                              {formatPrice(listing.listPrice)}
+                            </span>
+                          )}
+                        </div>
+                        <Link
+                          href="/contact"
+                          className="px-6 py-3 border border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors font-sans uppercase tracking-widest text-xs text-center"
+                        >
+                          Inquire
+                        </Link>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+
+        </motion.div>
+      </div>
     </div>
   );
 }

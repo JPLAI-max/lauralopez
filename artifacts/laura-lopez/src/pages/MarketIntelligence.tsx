@@ -1,4 +1,6 @@
 import { motion, type Variants } from "framer-motion";
+import { useEffect, useState } from "react";
+import { publicApi, type PublicArticle } from "../lib/public-api";
 
 const fadeUpVariant: Variants = {
   hidden: { opacity: 0, y: 30 },
@@ -10,51 +12,76 @@ const staggerContainer: Variants = {
   visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
-const categories = [
-  {
-    name: "Neighborhood Intelligence",
-    articles: [
-      { title: "Beverly Park: Guard-gated community overview, lot sizes, comp analysis", desc: "A comprehensive analysis of the enduring premium associated with Los Angeles' most secure enclave." },
-      { title: "Trousdale Estates: Mid-century modernist architecture guide", desc: "Understanding the preservation value and renovation constraints of Trousdale's architectural heritage." },
-      { title: "Holmby Hills: Estate-sized lots, proximity to UCLA, historic value", desc: "The structural advantages of Holmby Hills' rare flat acreage and platinum triangle positioning." },
-      { title: "Beverly Hills Flats: Post-war traditional inventory analysis", desc: "Assessing the generational turnover and redevelopment potential within the Flats." },
-      { title: "Bel Air: Canyon privacy, compound potential", desc: "Evaluating topographic constraints and privacy premiums in Bel Air's upper and lower canyons." }
-    ]
-  },
-  {
-    name: "Regulatory Intelligence",
-    articles: [
-      { title: "Proposition 19: Property tax implications for inherited real estate", desc: "Strategic planning required to navigate the reassessment of legacy assets upon transfer." },
-      { title: "FIRPTA: Foreign buyer requirements and withholding rules", desc: "Essential compliance frameworks for international principals acquiring or divesting U.S. property." },
-      { title: "FinCEN Beneficial Ownership: Reporting requirements for LLCs", desc: "Navigating new transparency mandates while maintaining appropriate corporate veils." },
-      { title: "AB38: Fire hardening disclosure requirements", desc: "Understanding the liability and compliance landscape for hillside properties." }
-    ]
-  },
-  {
-    name: "Architecture",
-    articles: [
-      { title: "Paul Williams: The dean of Beverly Hills residential design", desc: "The enduring market premium commanded by verified Williams commissions." },
-      { title: "Wallace Neff: Spanish Colonial Revival mastery", desc: "Identifying and preserving the hallmark details of Neff's most significant estates." },
-      { title: "Richard Neutra: Case Study modernism in the hills", desc: "The unique valuation metrics applied to historically significant modernist structures." },
-      { title: "Buff & Hensman: Desert modernism influence", desc: "The resurgence of post and beam architecture and its impact on hillside valuations." }
-    ]
-  },
-  {
-    name: "Insurance & Risk",
-    articles: [
-      { title: "Fire hardening strategies for brush-zone properties", desc: "Proactive structural enhancements to maintain insurability in high-risk zones." },
-      { title: "Brush clearance compliance guides", desc: "Annual mitigation requirements for estate properties abutting natural topography." },
-      { title: "Insurance optimization for high-value homes", desc: "Navigating the constricted California luxury insurance market." }
-    ]
-  }
+const CATEGORY_LABELS: Record<string, string> = {
+  neighborhood: "Neighborhood Intelligence",
+  regulatory: "Regulatory Intelligence",
+  architecture: "Architecture",
+  insurance: "Insurance & Risk",
+  market: "Market",
+};
+
+const CATEGORY_ORDER = ["neighborhood", "regulatory", "architecture", "insurance", "market"];
+
+// Hardcoded fallback data (matches original MarketIntelligence.tsx exactly)
+const FALLBACK_ARTICLES: PublicArticle[] = [
+  // Neighborhood Intelligence
+  { id: "1", slug: "", title: "Beverly Park: Guard-gated community overview, lot sizes, comp analysis", category: "neighborhood", excerpt: "A comprehensive analysis of the enduring premium associated with Los Angeles' most secure enclave.", heroMediaId: null, publishedAt: null },
+  { id: "2", slug: "", title: "Trousdale Estates: Mid-century modernist architecture guide", category: "neighborhood", excerpt: "Understanding the preservation value and renovation constraints of Trousdale's architectural heritage.", heroMediaId: null, publishedAt: null },
+  { id: "3", slug: "", title: "Holmby Hills: Estate-sized lots, proximity to UCLA, historic value", category: "neighborhood", excerpt: "The structural advantages of Holmby Hills' rare flat acreage and platinum triangle positioning.", heroMediaId: null, publishedAt: null },
+  { id: "4", slug: "", title: "Beverly Hills Flats: Post-war traditional inventory analysis", category: "neighborhood", excerpt: "Assessing the generational turnover and redevelopment potential within the Flats.", heroMediaId: null, publishedAt: null },
+  { id: "5", slug: "", title: "Bel Air: Canyon privacy, compound potential", category: "neighborhood", excerpt: "Evaluating topographic constraints and privacy premiums in Bel Air's upper and lower canyons.", heroMediaId: null, publishedAt: null },
+  // Regulatory
+  { id: "6", slug: "", title: "Proposition 19: Property tax implications for inherited real estate", category: "regulatory", excerpt: "Strategic planning required to navigate the reassessment of legacy assets upon transfer.", heroMediaId: null, publishedAt: null },
+  { id: "7", slug: "", title: "FIRPTA: Foreign buyer requirements and withholding rules", category: "regulatory", excerpt: "Essential compliance frameworks for international principals acquiring or divesting U.S. property.", heroMediaId: null, publishedAt: null },
+  { id: "8", slug: "", title: "FinCEN Beneficial Ownership: Reporting requirements for LLCs", category: "regulatory", excerpt: "Navigating new transparency mandates while maintaining appropriate corporate veils.", heroMediaId: null, publishedAt: null },
+  { id: "9", slug: "", title: "AB38: Fire hardening disclosure requirements", category: "regulatory", excerpt: "Understanding the liability and compliance landscape for hillside properties.", heroMediaId: null, publishedAt: null },
+  // Architecture
+  { id: "10", slug: "", title: "Paul Williams: The dean of Beverly Hills residential design", category: "architecture", excerpt: "The enduring market premium commanded by verified Williams commissions.", heroMediaId: null, publishedAt: null },
+  { id: "11", slug: "", title: "Wallace Neff: Spanish Colonial Revival mastery", category: "architecture", excerpt: "Identifying and preserving the hallmark details of Neff's most significant estates.", heroMediaId: null, publishedAt: null },
+  { id: "12", slug: "", title: "Richard Neutra: Case Study modernism in the hills", category: "architecture", excerpt: "The unique valuation metrics applied to historically significant modernist structures.", heroMediaId: null, publishedAt: null },
+  { id: "13", slug: "", title: "Buff & Hensman: Desert modernism influence", category: "architecture", excerpt: "The resurgence of post and beam architecture and its impact on hillside valuations.", heroMediaId: null, publishedAt: null },
+  // Insurance
+  { id: "14", slug: "", title: "Fire hardening strategies for brush-zone properties", category: "insurance", excerpt: "Proactive structural enhancements to maintain insurability in high-risk zones.", heroMediaId: null, publishedAt: null },
+  { id: "15", slug: "", title: "Brush clearance compliance guides", category: "insurance", excerpt: "Annual mitigation requirements for estate properties abutting natural topography.", heroMediaId: null, publishedAt: null },
+  { id: "16", slug: "", title: "Insurance optimization for high-value homes", category: "insurance", excerpt: "Navigating the constricted California luxury insurance market.", heroMediaId: null, publishedAt: null },
 ];
 
 export default function MarketIntelligence() {
+  const [articles, setArticles] = useState<PublicArticle[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    publicApi.articles
+      .list({ pageSize: 100 })
+      .then((res) => {
+        // If API returns articles, use them; otherwise fall back to seed data
+        setArticles(res.articles.length > 0 ? res.articles : FALLBACK_ARTICLES);
+      })
+      .catch(() => setArticles(FALLBACK_ARTICLES))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Group by category preserving display order
+  const grouped = CATEGORY_ORDER.reduce<Record<string, PublicArticle[]>>((acc, cat) => {
+    const items = articles.filter((a) => a.category === cat);
+    if (items.length > 0) acc[cat] = items;
+    return acc;
+  }, {});
+
+  // Show fallback categories even while loading
+  const displayData = loading
+    ? CATEGORY_ORDER.reduce<Record<string, PublicArticle[]>>((acc, cat) => {
+        const items = FALLBACK_ARTICLES.filter((a) => a.category === cat);
+        if (items.length > 0) acc[cat] = items;
+        return acc;
+      }, {})
+    : grouped;
+
   return (
-    <div className="w-full  pb-24 bg-background">
+    <div className="w-full pb-24 bg-background">
       <div className="container mx-auto px-6">
         <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="max-w-6xl mx-auto">
-          
+
           <motion.div variants={fadeUpVariant} className="mb-24 text-center max-w-3xl mx-auto">
             <h1 className="font-serif text-[clamp(2.25rem,6vw,3.75rem)] text-primary mb-6">Market Intelligence</h1>
             <p className="font-serif text-xl text-foreground/80 leading-relaxed">
@@ -63,20 +90,32 @@ export default function MarketIntelligence() {
           </motion.div>
 
           <div className="space-y-32">
-            {categories.map((category, index) => (
+            {Object.entries(displayData).map(([category, categoryArticles], index) => (
               <motion.div key={index} variants={fadeUpVariant} className="space-y-8">
                 <div className="border-b border-border pb-4 mb-8">
-                  <h2 className="font-sans uppercase tracking-widest text-lg text-primary">{category.name}</h2>
+                  <h2 className="font-sans uppercase tracking-widest text-lg text-primary">
+                    {CATEGORY_LABELS[category] ?? category}
+                  </h2>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {category.articles.map((article, i) => (
-                    <div key={i} className="bg-card p-8 border border-border group cursor-pointer hover:shadow-md transition-all flex flex-col h-full">
-                      <span className="font-sans text-xs uppercase tracking-widest text-secondary mb-4 block">{category.name}</span>
-                      <h3 className="font-serif text-2xl mb-4 group-hover:text-primary transition-colors">{article.title}</h3>
-                      <p className="font-serif text-muted-foreground mb-8 flex-1">{article.desc}</p>
+                  {categoryArticles.map((article) => (
+                    <div
+                      key={article.id}
+                      className="bg-card p-8 border border-border group cursor-pointer hover:shadow-md transition-all flex flex-col h-full"
+                    >
+                      <span className="font-sans text-xs uppercase tracking-widest text-secondary mb-4 block">
+                        {CATEGORY_LABELS[article.category] ?? article.category}
+                      </span>
+                      <h3 className="font-serif text-2xl mb-4 group-hover:text-primary transition-colors">
+                        {article.title}
+                      </h3>
+                      <p className="font-serif text-muted-foreground mb-8 flex-1">{article.excerpt}</p>
                       <span className="font-sans text-xs uppercase tracking-widest text-primary flex items-center gap-2">
-                        Request Full Report <span className="text-secondary opacity-0 group-hover:opacity-100 transition-opacity transform -translate-x-2 group-hover:translate-x-0">→</span>
+                        Request Full Report{" "}
+                        <span className="text-secondary opacity-0 group-hover:opacity-100 transition-opacity transform -translate-x-2 group-hover:translate-x-0">
+                          →
+                        </span>
                       </span>
                     </div>
                   ))}

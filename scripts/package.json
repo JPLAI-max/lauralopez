@@ -10,6 +10,7 @@
     "test-security": "tsx ./src/test-security-fixes.ts",
     "seed-templates": "tsx ./src/seed-templates.ts",
     "test-brick3": "tsx ./src/test-brick3.ts",
+    "seed-content": "tsx ./src/seed-content.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

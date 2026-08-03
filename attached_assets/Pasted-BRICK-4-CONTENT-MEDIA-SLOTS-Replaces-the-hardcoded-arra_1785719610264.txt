@@ -1,0 +1,256 @@
+BRICK 4 — CONTENT, MEDIA & SLOTS
+
+Replaces the hardcoded arrays in MarketIntelligence.tsx, 
+TopPicks.tsx, Listings.tsx, and Sold.tsx with DB-backed content, 
+plus a media library with named image slots.
+
+Every table gets ownerId (notNull, indexed) and officeId 
+(nullable) — same rule as Brick 3.
+
+────────────────────────────────────────
+1. STORAGE — Cloudflare R2
+────────────────────────────────────────
+Env (do NOT prompt for these — defer like Resend):
+  R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+  R2_BUCKET, R2_PUBLIC_BASE_URL
+
+If unset, the media module must degrade: log at info, and upload
+endpoints return 503 with "Storage not configured." The app must
+boot and every other feature must work. Same pattern as mailer.ts.
+
+Use @aws-sdk/client-s3 against the R2 endpoint. Presigned PUT for
+upload — do NOT proxy file bytes through the API server.
+
+────────────────────────────────────────
+2. SCHEMA — lib/db/src/schema/content.ts
+────────────────────────────────────────
+media
+  id, ownerId, officeId
+  storageKey       text notNull unique
+  filename         text notNull
+  mimeType         text notNull
+  sizeBytes        integer notNull
+  width            integer notNull
+  height           integer notNull
+  aspectRatio      numeric(6,4) notNull    // width/height, stored
+  focalX           numeric(4,3) notNull default 0.5
+  focalY           numeric(4,3) notNull default 0.5
+  altText          text nullable
+  credit           text nullable
+  derivatives      jsonb notNull default '{}'  // { "480": key, ... }
+  createdAt
+
+  index on ownerId, aspectRatio
+
+properties          -- one row per house, used by BOTH Top Picks
+                    -- and Sold. Do not split these.
+  id, ownerId, officeId
+  address          text notNull
+  neighborhood     text nullable
+  status           text notNull default 'pick'
+                   // pick | listed | sold
+  listPrice        numeric(14,2) nullable
+  soldPrice        numeric(14,2) nullable
+  soldDate         date nullable
+  beds, baths      numeric nullable
+  sqft, lotSqft    integer nullable
+  yearBuilt        integer nullable
+  architect        text nullable
+  isLauraListing   boolean notNull default false
+  listingBrokerage text nullable      // required when not hers
+  commentary       text nullable      // Laura's voice — the product
+  architectureNotes text nullable
+  lotNotes         text nullable
+  valueNotes       text nullable
+  heroMediaId      uuid -> media.id nullable
+  featured         boolean notNull default false
+  sortOrder        integer notNull default 0
+  createdAt, updatedAt
+
+property_media      -- gallery, ordered
+  id, propertyId cascade, mediaId, sortOrder
+
+articles
+  id, ownerId, officeId
+  slug             text notNull unique
+  title            text notNull
+  category         text notNull
+                   // neighborhood | regulatory | architecture |
+                   // insurance | market
+  excerpt          text notNull
+  body             text notNull         // markdown
+  heroMediaId      uuid nullable
+  status           text notNull default 'draft'  // draft|published
+  publishedAt      timestamptz nullable
+  createdAt, updatedAt
+
+  index on status+publishedAt, unique on slug
+
+image_slots         -- named fixed positions on the public site
+  id
+  slotKey          text notNull unique   // "home.hero"
+  label            text notNull          // "Homepage Hero"
+  aspectRatio      numeric(6,4) notNull  // what it WANTS
+  minWidth         integer notNull
+  currentMediaId   uuid nullable
+  currentPropertyId uuid nullable        // optional attribution
+  assignedAt       timestamptz nullable
+
+slot_assignments    -- APPEND ONLY history
+  id, slotKey, mediaId, propertyId nullable,
+  assignedAt, assignedBy, unassignedAt nullable
+
+────────────────────────────────────────
+3. UPLOAD PIPELINE
+────────────────────────────────────────
+POST /api/admin/media/presign  { filename, mimeType, sizeBytes }
+  -> { uploadUrl, storageKey }
+  Reject non-image mimeTypes. Reject over 25MB.
+
+POST /api/admin/media/complete { storageKey, filename, mimeType }
+  Server fetches the object, reads real dimensions with `sharp`,
+  generates WebP derivatives at 480/960/1440/2400 (never upscale),
+  writes them to R2, inserts the media row.
+
+  Do NOT trust client-reported dimensions. Read them server-side.
+
+  If sharp fails, delete the uploaded object and return 422.
+
+────────────────────────────────────────
+4. SLOT MATCHING — the "use this for..." prompt
+────────────────────────────────────────
+GET /api/admin/media/:id/slot-suggestions
+
+  Return only slots where:
+    - media.width >= slot.minWidth, AND
+    - |media.aspectRatio - slot.aspectRatio| / slot.aspectRatio
+      <= 0.25
+
+  Never suggest a slot the image would obviously break. A 3:4
+  portrait must not appear for a 21:9 hero. This filter is the
+  whole feature — a suggestion that looks broken kills trust in
+  the tool permanently.
+
+  Sort by closest ratio match. Include each slot's current image
+  thumbnail so she sees what she'd be replacing.
+
+POST /api/admin/slots/:slotKey/assign { mediaId, propertyId? }
+  Closes the prior slot_assignments row (sets unassignedAt),
+  opens a new one, updates image_slots.
+
+POST /api/admin/slots/:slotKey/revert
+  Reassigns the immediately previous assignment.
+
+NEVER auto-assign. Every assignment is an explicit user action
+following a preview.
+
+────────────────────────────────────────
+5. UPLOAD UX — preview before commit
+────────────────────────────────────────
+After a successful upload, show:
+  "Uploaded {filename} — {w}×{h}. Use for:"
+  [ matching slot buttons ] [ Just add to library ]
+
+Selecting a slot opens a PREVIEW showing the actual public
+section rendered with the new image at the slot's real aspect
+ratio, with a draggable focal point. Two buttons: Use this image
+/ Cancel. Nothing writes until Use this image.
+
+Same flow when a property is saved with status 'sold':
+  "Feature this on the homepage?" -> same preview -> confirm.
+
+────────────────────────────────────────
+6. FOCAL POINT + SERVING
+────────────────────────────────────────
+Public image component reads focalX/focalY and emits
+object-position. Emit srcset from derivatives with sizes
+appropriate to the slot. Always include alt text — fall back to
+the property address if altText is null, never to the filename.
+
+────────────────────────────────────────
+7. STALENESS — admin dashboard
+────────────────────────────────────────
+Dashboard card listing every slot with days since assignedAt:
+  Home hero          47 days
+  About portrait     12 days
+
+Plain factual list. No nagging copy, no red alerts, no badges.
+Sort oldest first. Also show days since the most recent article
+publishedAt.
+
+────────────────────────────────────────
+8. TRACK RECORD — properties are never deleted
+────────────────────────────────────────
+When a Top Pick sells, it does NOT get removed. Status moves to
+'sold', soldPrice and soldDate are filled, and the original
+commentary stays intact and visible.
+
+Public Top Picks page shows current picks first, then a
+"Previously featured" section where each sold entry displays
+Laura's original commentary alongside what it actually closed at.
+That accumulating record is the point — it is the public evidence
+that her calls were right.
+
+Never hard-delete a property. Add an `archived` boolean if
+something must be hidden.
+
+────────────────────────────────────────
+9. PUBLIC PAGES — replace hardcoded arrays
+────────────────────────────────────────
+  GET /api/content/articles          published only, paginated
+  GET /api/content/articles/:slug
+  GET /api/content/properties        filter by status
+  GET /api/content/slots             all slots + resolved media
+
+Migrate the existing hardcoded content in as seed data —
+scripts/src/seed-content.ts, idempotent, taking the 16 article
+titles from MarketIntelligence.tsx and the 6 properties from
+TopPicks.tsx exactly as written. Do not invent replacement copy.
+
+Every property card and detail view must display the listing
+brokerage when isLauraListing is false. Non-negotiable — showing
+another brokerage's property without attribution is not
+acceptable.
+
+Show soldDate on sold properties. "Recent" is only credible if
+it is dated.
+
+────────────────────────────────────────
+10. ADMIN — replace the Content stub
+────────────────────────────────────────
+/admin/content with three tabs: Articles, Properties, Media.
+Articles: markdown editor with a preview toggle, draft/publish,
+slug auto-generated from title but editable, uniqueness checked
+before save.
+Properties: form with all fields, drag-to-order gallery, hero
+selection.
+Media: grid, filter by aspect ratio, click for detail with slot
+assignment and focal point editor.
+
+Dense working layout. Usable at 375px.
+
+────────────────────────────────────────
+ACCEPTANCE
+────────────────────────────────────────
+1.  typecheck clean.
+2.  R2 vars unset -> app boots, public pages render, upload
+    returns 503, nothing crashes.
+3.  Upload a 3200x1800 image -> hero suggested.
+4.  Upload a 1200x1600 portrait -> hero NOT suggested.
+5.  Server-read dimensions match the real file, not client input.
+6.  Derivatives generated at all four widths; a 900px-wide source
+    does not produce a 1440 or 2400 upscale.
+7.  Slot assignment writes history; revert restores the prior
+    image.
+8.  Focal point change alters object-position on the public page.
+9.  Seeded article count matches the 16 in MarketIntelligence.tsx;
+    seeded property count matches the 6 in TopPicks.tsx.
+10. A property with isLauraListing false renders its listing
+    brokerage on both card and detail.
+11. Marking a pick sold keeps it visible with original commentary
+    plus the closing price.
+12. Dashboard staleness shows correct day counts.
+13. Draft articles do NOT appear on the public site.
+14. Content admin usable at 375px.
+
+Report each with evidence.
