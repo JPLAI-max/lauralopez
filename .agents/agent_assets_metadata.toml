@@ -1,5 +1,4 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "h_mRCiFD5G6e4dc-pfLOG"
@@ -60,3 +59,45 @@ id = "ndJIkvSBEhXtSrkGcpkJE"
 uri = "file://artifacts/laura-lopez/public/images/top-pick-6.png"
 type = "image"
 title = "Modern architectural compound"
+
+[[outputs]]
+id = "H7qQH0RBndfCSiuL51wtN"
+uri = "file://docs/template-previews/story-just-sold.png"
+type = "image"
+title = "story.just_sold — real photo"
+description = "Acceptance #1: story.just_sold rendered against seeded top-pick-1.png (1080×1920)"
+
+[[outputs]]
+id = "hfrLgVoyhLcRvwEulSn1I"
+uri = "file://docs/template-previews/story-just-sold-no-sky.png"
+type = "image"
+title = "story.just_sold — building facade (no sky)"
+description = "Acceptance #2: dark building fills upper third; top scrim keeps headline legible"
+
+[[outputs]]
+id = "2iTNHLGxOkmPUsdSSRf3Q"
+uri = "file://docs/template-previews/post-just-listed.png"
+type = "image"
+title = "post.just_listed — 1080×1080"
+description = "Acceptance #3: post template at 1:1 aspect"
+
+[[outputs]]
+id = "75qmXC_xoPV9FrFinety5"
+uri = "file://docs/template-previews/long-headline.png"
+type = "image"
+title = "Long headline (24 chars → 60px)"
+description = "Acceptance #5: 'SPECTACULAR VIEW ESTATES' (24 chars) renders at fontSizeLong=60, no wrap"
+
+[[outputs]]
+id = "qIDkCUbo_dtdWEuaNL1zp"
+uri = "file://docs/template-previews/focal-left.png"
+type = "image"
+title = "Focal crop — left (focalX=0.15)"
+description = "Acceptance #6a: warm/brown zone visible"
+
+[[outputs]]
+id = "UE8VWHXHZG1KGe3iXZ6qR"
+uri = "file://docs/template-previews/focal-right.png"
+type = "image"
+title = "Focal crop — right (focalX=0.85)"
+description = "Acceptance #6b: cool/blue zone visible"
