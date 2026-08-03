@@ -27,6 +27,7 @@ const MIGRATIONS = [
   "0000_woozy_titania.sql",
   "0001_brick5_campaign_engine.sql",
   "0002_brick52_marketing_templates.sql",
+  "0003_brick53_storage_provider.sql",
 ];
 
 async function run() {

@@ -41,15 +41,16 @@ const ALLOWED_MIME_TYPES = [
 // Helpers
 // ---------------------------------------------------------------------------
 function mediaResponse(m: typeof mediaTable.$inferSelect) {
-  const cfg_base      = isConfigured();
+  const sp             = m.storageProvider as string;
   const derivativeKeys = m.derivatives as Record<string, string>;
   const derivatives: Record<string, string> = {};
   for (const [w, key] of Object.entries(derivativeKeys)) {
-    derivatives[w] = cfg_base ? publicUrl(key) : key;
+    // local files: pass derivative paths through as-is (no R2 prefix needed)
+    derivatives[w] = sp === "local" ? key : (isConfigured() ? publicUrl(key) : key);
   }
   return {
     ...m,
-    url: cfg_base ? publicUrl(m.storageKey) : null,
+    url: sp === "local" ? m.storageKey : (isConfigured() ? publicUrl(m.storageKey) : null),
     derivatives,
   };
 }

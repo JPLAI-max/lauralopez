@@ -12,11 +12,19 @@ const router: IRouter = Router();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Resolve a media row's primary URL.
+ * - local: storageKey IS the public path (e.g. "/images/top-pick-1.png")
+ * - r2:    prefix with R2_PUBLIC_BASE_URL; return null when R2 not configured
+ */
 function resolveMediaUrl(
-  storageKey: string,
-  derivatives: Record<string, string>,
+  storageKey:      string,
+  derivatives:     Record<string, string>,
+  storageProvider: string,
   preferWidth = 960,
 ): string | null {
+  if (storageProvider === "local") return storageKey;
   if (!isConfigured()) return null;
   const widths = [preferWidth, 480, 960, 1440, 2400];
   for (const w of widths) {
@@ -25,7 +33,15 @@ function resolveMediaUrl(
   return publicUrl(storageKey);
 }
 
-function resolvedSrcset(derivatives: Record<string, string>): string | null {
+/**
+ * Build a srcset string for responsive images.
+ * Local files have no derivatives — srcset is always null for them.
+ */
+function resolvedSrcset(
+  derivatives:     Record<string, string>,
+  storageProvider: string,
+): string | null {
+  if (storageProvider === "local") return null;
   if (!isConfigured()) return null;
   const entries = Object.entries(derivatives)
     .map(([w, key]) => `${publicUrl(key)} ${w}w`)
@@ -43,9 +59,10 @@ async function attachMediaToProperty(p: typeof propertiesTable.$inferSelect) {
     const [m] = await db.select().from(mediaTable).where(eq(mediaTable.id, p.heroMediaId));
     if (m) {
       const derivs = m.derivatives as Record<string, string>;
-      heroUrl = resolveMediaUrl(m.storageKey, derivs);
-      heroSrcset = resolvedSrcset(derivs);
-      heroAlt = m.altText ?? p.address;
+      const sp     = m.storageProvider as string;
+      heroUrl    = resolveMediaUrl(m.storageKey, derivs, sp);
+      heroSrcset = resolvedSrcset(derivs, sp);
+      heroAlt    = m.altText ?? p.address;
       heroFocalX = m.focalX as string;
       heroFocalY = m.focalY as string;
     }
@@ -109,7 +126,7 @@ router.get("/articles/:slug", async (req: Request, res: Response) => {
   if (article.heroMediaId) {
     const [m] = await db.select().from(mediaTable).where(eq(mediaTable.id, article.heroMediaId));
     if (m) {
-      heroUrl = resolveMediaUrl(m.storageKey, m.derivatives as Record<string, string>);
+      heroUrl = resolveMediaUrl(m.storageKey, m.derivatives as Record<string, string>, m.storageProvider as string);
       heroAlt = m.altText ?? article.title;
     }
   }
@@ -170,11 +187,12 @@ router.get("/slots", async (_req: Request, res: Response) => {
           .where(eq(mediaTable.id, slot.currentMediaId));
         if (m) {
           const derivs = m.derivatives as Record<string, string>;
+          const sp     = m.storageProvider as string;
           currentMedia = {
-            id: m.id,
-            url: resolveMediaUrl(m.storageKey, derivs),
-            srcset: resolvedSrcset(derivs),
-            alt: m.altText ?? "",
+            id:     m.id,
+            url:    resolveMediaUrl(m.storageKey, derivs, sp),
+            srcset: resolvedSrcset(derivs, sp),
+            alt:    m.altText ?? "",
             focalX: m.focalX as string,
             focalY: m.focalY as string,
           };

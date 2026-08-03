@@ -9,7 +9,12 @@ const router: IRouter = Router();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function mediaUrl(storageKey: string, derivatives: Record<string, string>): string | null {
+function mediaUrl(
+  storageKey:      string,
+  derivatives:     Record<string, string>,
+  storageProvider: string,
+): string | null {
+  if (storageProvider === "local") return storageKey;
   if (!isConfigured()) return null;
   const thumbKey = derivatives["960"] ?? derivatives["480"] ?? storageKey;
   return publicUrl(thumbKey);
@@ -22,7 +27,7 @@ async function enrichProperty(p: typeof propertiesTable.$inferSelect) {
       .select()
       .from(mediaTable)
       .where(and(eq(mediaTable.id, p.heroMediaId), eq(mediaTable.ownerId, p.ownerId)));
-    if (m) heroUrl = mediaUrl(m.storageKey, m.derivatives as Record<string, string>);
+    if (m) heroUrl = mediaUrl(m.storageKey, m.derivatives as Record<string, string>, m.storageProvider as string);
   }
   const gallery = await db
     .select({ mediaId: propertyMediaTable.mediaId, sortOrder: propertyMediaTable.sortOrder })

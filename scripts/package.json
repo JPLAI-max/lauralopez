@@ -11,6 +11,7 @@
     "seed-templates": "tsx ./src/seed-templates.ts",
     "test-brick3": "tsx ./src/test-brick3.ts",
     "seed-content": "tsx ./src/seed-content.ts",
+    "transfer-ownership": "tsx ./src/transfer-ownership.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

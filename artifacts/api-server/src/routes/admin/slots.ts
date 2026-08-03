@@ -9,7 +9,12 @@ const router: IRouter = Router();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function slotMediaUrl(storageKey: string, derivatives: Record<string, string>): string | null {
+function slotMediaUrl(
+  storageKey:      string,
+  derivatives:     Record<string, string>,
+  storageProvider: string,
+): string | null {
+  if (storageProvider === "local") return storageKey;
   if (!isConfigured()) return null;
   const thumbKey = derivatives["480"] ?? derivatives["960"] ?? storageKey;
   return publicUrl(thumbKey);
@@ -39,7 +44,7 @@ router.get("/", async (req: Request, res: Response) => {
           currentMedia = {
             id:       m.id,
             filename: m.filename,
-            url:      slotMediaUrl(m.storageKey, derivs),
+            url:      slotMediaUrl(m.storageKey, derivs, m.storageProvider as string),
           };
         }
       }

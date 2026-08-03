@@ -33,6 +33,8 @@ export const mediaTable = pgTable(
     altText: text("alt_text"),
     credit: text("credit"),
     derivatives: jsonb("derivatives").notNull().default(sql`'{}'::jsonb`),
+    // 'r2' (default — uploaded via admin) | 'local' (public/images static file)
+    storageProvider: text("storage_provider").notNull().default("r2"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("media_owner_aspect_idx").on(t.ownerId, t.aspectRatio)],

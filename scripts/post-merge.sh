@@ -10,6 +10,9 @@ echo "▶ post-merge: applying migrations (Bricks 1–5.2)…"
 # All migration files use CREATE TABLE IF NOT EXISTS — idempotent.
 pnpm --filter @workspace/scripts exec tsx src/migrate-brick5.ts
 
+echo "▶ post-merge: seeding content (media, properties, slots) (Brick 5.3)…"
+pnpm --filter @workspace/scripts exec tsx src/seed-content.ts
+
 echo "▶ post-merge: seeding default campaign template…"
 pnpm --filter @workspace/scripts exec tsx src/seed-campaigns.ts
 
