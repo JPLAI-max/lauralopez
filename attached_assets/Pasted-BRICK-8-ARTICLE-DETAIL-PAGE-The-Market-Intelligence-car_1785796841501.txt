@@ -1,0 +1,59 @@
+BRICK 8 — ARTICLE DETAIL PAGE
+
+The Market Intelligence cards render with cursor-pointer and
+"Request Full Report" text but have no Link, no onClick, and no
+handler. There is also no article detail route registered in
+App.tsx. The card is decorative.
+
+1. ARTICLE DETAIL ROUTE
+   Register /intelligence/:slug in App.tsx (public, outside the
+   admin router). Build pages/ArticleDetail.tsx.
+
+   Fetch from the existing GET /api/content/articles/:slug.
+   Do NOT add a new endpoint.
+
+   Layout: hero image from heroMediaId when present, category
+   label, title, published date, then rendered markdown body.
+   Match the editorial feel of the rest of the site — generous
+   measure, serif body, no sidebar.
+
+   Published date must be visible. Dated content is the whole
+   credibility claim.
+
+   404 state for an unknown slug. A draft article must 404 on
+   the public site — verify this, it was acceptance check 13 in
+   Brick 4.
+
+2. MAKE THE CARDS LINK
+   Wrap each card in a Link to /intelligence/{slug}. Change the
+   label from "Request Full Report" to "Read" — the article is
+   free to read and the current label misdescribes it.
+
+3. GATED REPORT CTA — separate from the articles
+   At the bottom of the Market Intelligence page, add a distinct
+   section: "Request the Quarterly Market Report".
+
+   It opens the existing inquiry form with inquiryType
+   preset to "Market Report Request" and the message field
+   prefilled with the report name. Reuse ContactForm — do not
+   build a second form, and do not create a second submission
+   path.
+
+   The intelligence opt-in checkbox appears as normal,
+   unchecked. Requesting a report is not consent to a list.
+
+4. ADD THE INQUIRY TYPE
+   Add "Market Report Request" to the inquiryType allowlist on
+   BOTH client and server. The server whitelist is in
+   routes/inquiries.ts — they must match or submissions 400.
+
+ACCEPTANCE
+1. Clicking a Market Intelligence card opens the article at
+   /intelligence/{slug} with full body text.
+2. Published date renders on the detail page.
+3. An unknown slug renders 404, not a blank page.
+4. A draft article 404s on the public site.
+5. The quarterly report CTA opens the inquiry form with the type
+   preset and submits successfully.
+6. The new inquiry type appears in the admin Inquiries list.
+7. Article detail readable at 375px.

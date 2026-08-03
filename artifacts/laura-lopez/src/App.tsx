@@ -7,6 +7,7 @@ import Layout from "@/components/layout/Layout";
 import Home from "@/pages/Home";
 import About from "@/pages/About";
 import MarketIntelligence from "@/pages/MarketIntelligence";
+import ArticleDetail from "@/pages/ArticleDetail";
 import TopPicks from "@/pages/TopPicks";
 import Contact from "@/pages/Contact";
 import Listings from "@/pages/Listings";
@@ -36,6 +37,7 @@ function PublicRouter() {
         <Route path="/" component={Home} />
         <Route path="/about" component={About} />
         <Route path="/market-intelligence" component={MarketIntelligence} />
+        <Route path="/intelligence/:slug" component={ArticleDetail} />
         <Route path="/top-picks" component={TopPicks} />
         <Route path="/contact" component={Contact} />
         <Route path="/listings" component={Listings} />

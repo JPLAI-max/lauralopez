@@ -21,7 +21,14 @@ const formSchema = z.object({
   subscribeIntelligence: z.boolean().default(false),
 });
 
-export default function ContactForm() {
+interface ContactFormProps {
+  /** Pre-select a specific inquiry type (must match a SelectItem value). */
+  defaultInquiryType?: string;
+  /** Pre-fill the message textarea. */
+  defaultMessage?: string;
+}
+
+export default function ContactForm({ defaultInquiryType, defaultMessage }: ContactFormProps = {}) {
   const { toast } = useToast();
   const { mutate: submitInquiry, isPending } = useCreateInquiry();
 
@@ -32,8 +39,8 @@ export default function ContactForm() {
       email: "",
       phone: "",
       affiliation: "",
-      inquiryType: "",
-      message: "",
+      inquiryType: defaultInquiryType ?? "",
+      message:     defaultMessage     ?? "",
       website: "",
       subscribeIntelligence: false,
     },
@@ -168,6 +175,7 @@ export default function ContactForm() {
                   <SelectItem value="portfolio-review">Portfolio Review</SelectItem>
                   <SelectItem value="family-estate-planning">Family Estate Planning</SelectItem>
                   <SelectItem value="off-market-inquiry">Off-Market Inquiry</SelectItem>
+                  <SelectItem value="market-report-request">Market Report Request</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>

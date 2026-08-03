@@ -1,6 +1,15 @@
 import { motion, type Variants } from "framer-motion";
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { publicApi, type PublicArticle } from "../lib/public-api";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import ContactForm from "@/components/ContactForm";
 
 const fadeUpVariant: Variants = {
   hidden: { opacity: 0, y: 30 },
@@ -21,6 +30,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_ORDER = ["neighborhood", "regulatory", "architecture", "insurance", "market"];
+
+const REPORT_NAME = "Quarterly Market Report — Beverly Hills Estates";
 
 // Hardcoded fallback data (matches original MarketIntelligence.tsx exactly)
 const FALLBACK_ARTICLES: PublicArticle[] = [
@@ -49,6 +60,7 @@ const FALLBACK_ARTICLES: PublicArticle[] = [
 export default function MarketIntelligence() {
   const [articles, setArticles] = useState<PublicArticle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   useEffect(() => {
     publicApi.articles
@@ -99,33 +111,82 @@ export default function MarketIntelligence() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {categoryArticles.map((article) => (
-                    <div
-                      key={article.id}
-                      className="bg-card p-8 border border-border group cursor-pointer hover:shadow-md transition-all flex flex-col h-full"
-                    >
-                      <span className="font-sans text-xs uppercase tracking-widest text-secondary mb-4 block">
-                        {CATEGORY_LABELS[article.category] ?? article.category}
-                      </span>
-                      <h3 className="font-serif text-2xl mb-4 group-hover:text-primary transition-colors">
-                        {article.title}
-                      </h3>
-                      <p className="font-serif text-muted-foreground mb-8 flex-1">{article.excerpt}</p>
-                      <span className="font-sans text-xs uppercase tracking-widest text-primary flex items-center gap-2">
-                        Request Full Report{" "}
-                        <span className="text-secondary opacity-0 group-hover:opacity-100 transition-opacity transform -translate-x-2 group-hover:translate-x-0">
-                          →
+                  {categoryArticles.map((article) => {
+                    const inner = (
+                      <div className="bg-card p-8 border border-border group cursor-pointer hover:shadow-md transition-all flex flex-col h-full">
+                        <span className="font-sans text-xs uppercase tracking-widest text-secondary mb-4 block">
+                          {CATEGORY_LABELS[article.category] ?? article.category}
                         </span>
-                      </span>
-                    </div>
-                  ))}
+                        <h3 className="font-serif text-2xl mb-4 group-hover:text-primary transition-colors">
+                          {article.title}
+                        </h3>
+                        <p className="font-serif text-muted-foreground mb-8 flex-1">{article.excerpt}</p>
+                        <span className="font-sans text-xs uppercase tracking-widest text-primary flex items-center gap-2">
+                          Read{" "}
+                          <span className="text-secondary opacity-0 group-hover:opacity-100 transition-opacity transform -translate-x-2 group-hover:translate-x-0">
+                            →
+                          </span>
+                        </span>
+                      </div>
+                    );
+
+                    return article.slug ? (
+                      <Link key={article.id} href={`/intelligence/${article.slug}`}>
+                        {inner}
+                      </Link>
+                    ) : (
+                      <div key={article.id}>{inner}</div>
+                    );
+                  })}
                 </div>
               </motion.div>
             ))}
           </div>
 
+          {/* Quarterly Report CTA — distinct from article cards */}
+          <motion.div
+            variants={fadeUpVariant}
+            className="mt-32 border-t border-border pt-16 text-center max-w-2xl mx-auto"
+          >
+            <span className="font-sans text-xs uppercase tracking-widest text-secondary mb-4 block">
+              Proprietary Research
+            </span>
+            <h2 className="font-serif text-[clamp(1.5rem,4vw,2.5rem)] text-primary mb-6">
+              Request the Quarterly Market Report
+            </h2>
+            <p className="font-serif text-foreground/70 leading-relaxed mb-10">
+              Our quarterly report provides transaction-level analysis, micro-neighbourhood pricing shifts, and forward indicators not available in public data sources. Distributed exclusively to verified clients and advisory relationships.
+            </p>
+            <button
+              onClick={() => setReportDialogOpen(true)}
+              className="font-sans text-xs uppercase tracking-widest text-primary border border-primary px-10 py-4 hover:bg-primary hover:text-primary-foreground transition-colors"
+            >
+              Request Report
+            </button>
+          </motion.div>
+
         </motion.div>
       </div>
+
+      {/* Report request dialog — reuses ContactForm with preset values */}
+      <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="mb-6">
+            <DialogTitle className="font-serif text-2xl font-normal text-primary">
+              Request the Quarterly Market Report
+            </DialogTitle>
+            <DialogDescription className="font-serif text-foreground/60 leading-relaxed">
+              Complete the form below and we will follow up to verify your eligibility and arrange distribution.
+            </DialogDescription>
+          </DialogHeader>
+          {/* key forces ContactForm to remount (fresh useForm state) each time dialog opens */}
+          <ContactForm
+            key={String(reportDialogOpen)}
+            defaultInquiryType="market-report-request"
+            defaultMessage={`I would like to request the ${REPORT_NAME}.`}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

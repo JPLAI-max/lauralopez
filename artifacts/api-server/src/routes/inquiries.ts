@@ -52,6 +52,7 @@ const VALID_INQUIRY_TYPES = new Set([
   "portfolio-review",
   "family-estate-planning",
   "off-market-inquiry",
+  "market-report-request",
   "other",
 ]);
 
