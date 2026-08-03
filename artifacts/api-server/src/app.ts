@@ -32,7 +32,13 @@ app.use(
     },
   }),
 );
-app.use(cors({ credentials: true, origin: true }));
+app.use(cors({
+  credentials: true,
+  origin: true,
+  // X-Pending-Token is sent by the frontend as a fallback when SameSite=None cookies
+  // are blocked (e.g. Replit preview iframe / Chrome third-party cookie blocking).
+  allowedHeaders: ["Content-Type", "Authorization", "X-Pending-Token"],
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(sessionSecret));

@@ -3,6 +3,7 @@ import { db, sessionsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { createHash } from "crypto";
 import { logger } from "../lib/logger";
+import { isHttpsContext } from "../lib/https-context";
 
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 hours
 const SLIDING_THRESHOLD = SESSION_DURATION_MS / 2; // extend if > halfway to expiry
@@ -148,12 +149,6 @@ export function requireRole(role: string) {
   };
 }
 
-function isHttpsContext(req: Request): boolean {
-  if (process.env.NODE_ENV === "production") return true;
-  if (process.env.REPL_ID) return true;                         // Replit dev environment
-  const proto = req.headers["x-forwarded-proto"];
-  return proto === "https" || (Array.isArray(proto) && proto.includes("https"));
-}
 
 export function setSessionCookie(res: Response, req: Request, sessionId: string): void {
   const https = isHttpsContext(req);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { authApi, ApiError } from "@/lib/admin-api";
+import { authApi, ApiError, clearPendingToken } from "@/lib/admin-api";
 import { useQueryClient } from "@tanstack/react-query";
 
 type Step = "enroll" | "confirm" | "recovery";
@@ -45,6 +45,7 @@ export default function TotpSetup() {
     setLoading(true);
     try {
       const res = await authApi.totpConfirm(code.replace(/\s/g, ""));
+      clearPendingToken(); // session cookie now active; pending token no longer needed
       setRecoveryCodes(res.recoveryCodes);
       await qc.invalidateQueries({ queryKey: ["admin-me"] });
       setStep("recovery");

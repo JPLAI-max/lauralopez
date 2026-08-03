@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { authApi, ApiError } from "@/lib/admin-api";
+import { authApi, ApiError, storePendingToken, clearPendingToken } from "@/lib/admin-api";
 import { useQueryClient } from "@tanstack/react-query";
 
 type Step = "credentials" | "totp";
@@ -23,6 +23,9 @@ export default function AdminLogin() {
     setLoading(true);
     try {
       const res = await authApi.login(email, password);
+      // Store the pending token in sessionStorage so subsequent TOTP/enroll
+      // requests can send it as X-Pending-Token (fallback when cookies are blocked).
+      if (res.pendingToken) storePendingToken(res.pendingToken);
       if (res.requiresTotpSetup) {
         setRequiresTotpSetup(true);
         navigate("/admin/totp-setup");
@@ -42,6 +45,7 @@ export default function AdminLogin() {
     setLoading(true);
     try {
       await authApi.verifyTotp(totpCode.replace(/\s/g, ""));
+      clearPendingToken();
       await qc.invalidateQueries({ queryKey: ["admin-me"] });
       navigate("/admin");
     } catch (err) {

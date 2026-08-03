@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import argon2 from "argon2";
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import { generateSecret, generateURI, verifySync as _totpVerify } from "otplib";
 import {
   db,
@@ -12,6 +12,7 @@ import {
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { encryptTotpSecret, decryptTotpSecret } from "../lib/crypto";
+import { isHttpsContext } from "../lib/https-context";
 import {
   setSessionCookie,
   clearSessionCookie,
@@ -115,18 +116,54 @@ async function getDummyHash(): Promise<string> {
 getDummyHash().catch(() => {});
 
 // ---------------------------------------------------------------------------
-// Pending cookie helpers
+// Pending cookie helpers + cookie-less fallback token
 // ---------------------------------------------------------------------------
 const PENDING_COOKIE_MAX_AGE = 10 * 60 * 1000;
 
-// Detect HTTPS context: production, Replit container, or an explicit HTTPS proxy header.
-// Replit's preview is always behind HTTPS but does NOT forward x-forwarded-proto, so
-// we detect the Replit environment via the REPL_ID variable (always set in Replit containers).
-function isHttpsContext(req: Request): boolean {
-  if (process.env.NODE_ENV === "production") return true;
-  if (process.env.REPL_ID) return true;                         // Replit dev environment
-  const proto = req.headers["x-forwarded-proto"];
-  return proto === "https" || (Array.isArray(proto) && proto.includes("https"));
+/**
+ * Creates a short-lived HMAC-signed token encoding the pending userId.
+ * Returned in the login response body so the frontend can send it as
+ * X-Pending-Token when SameSite=None cookies are blocked (Replit iframe,
+ * Chrome third-party cookie blocking, etc.).
+ * Format: `<userId>|<expiryMs>|<base64url-hmac>`
+ */
+function createPendingToken(userId: string): string {
+  const expiry = Date.now() + PENDING_COOKIE_MAX_AGE;
+  const payload = `${userId}|${expiry}`;
+  const sig = createHmac("sha256", process.env.SESSION_SECRET!).update(payload).digest("base64url");
+  return `${payload}|${sig}`;
+}
+
+/**
+ * Verifies a pending token. Returns the userId on success, null on any failure.
+ * Uses a constant-time comparison to prevent timing attacks.
+ */
+function verifyPendingToken(token: string): string | null {
+  const parts = token.split("|");
+  if (parts.length !== 3) return null;
+  const [userId, expiryStr, sig] = parts as [string, string, string];
+  const expiry = parseInt(expiryStr, 10);
+  if (isNaN(expiry) || Date.now() > expiry) return null;
+  const payload = `${userId}|${expiryStr}`;
+  const expectedSig = createHmac("sha256", process.env.SESSION_SECRET!).update(payload).digest("base64url");
+  const aBuf = Buffer.from(sig);
+  const bBuf = Buffer.from(expectedSig);
+  if (aBuf.length !== bBuf.length) return null;
+  if (!timingSafeEqual(aBuf, bBuf)) return null;
+  return userId;
+}
+
+/**
+ * Resolves the pending user ID from either the signed cookie (works in most
+ * browsers) or the X-Pending-Token request header (fallback for cross-origin
+ * iframe contexts where cookies are blocked).
+ */
+function getPendingUserId(req: Request): string | undefined {
+  const fromCookie = req.signedCookies?.totp_pending as string | undefined;
+  if (fromCookie) return fromCookie;
+  const headerToken = req.headers["x-pending-token"] as string | undefined;
+  if (headerToken) return verifyPendingToken(headerToken) ?? undefined;
+  return undefined;
 }
 
 function setPendingCookie(res: Response, req: Request, userId: string): void {
@@ -204,13 +241,14 @@ router.post("/auth/login", async (req: Request, res: Response): Promise<void> =>
   }
 
   setPendingCookie(res, req, user.id);
+  const pendingToken = createPendingToken(user.id);
   await logAuthEvent({ userId: user.id, email, action: "password_ok", success: true, ipHash, userAgent: ua });
-  res.json({ requiresTotp: user.totpEnabled, requiresTotpSetup: !user.totpEnabled });
+  res.json({ requiresTotp: user.totpEnabled, requiresTotpSetup: !user.totpEnabled, pendingToken });
 });
 
 // POST /auth/verify-totp
 router.post("/auth/verify-totp", async (req: Request, res: Response): Promise<void> => {
-  const userId = req.signedCookies?.totp_pending as string | undefined;
+  const userId = getPendingUserId(req);
   if (!userId) { res.status(401).json({ error: "No pending login session" }); return; }
   const parsed = TotpCodeBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid TOTP code" }); return; }
@@ -251,7 +289,7 @@ router.post("/auth/verify-totp", async (req: Request, res: Response): Promise<vo
 
 // POST /auth/verify-recovery — recovery code in place of TOTP
 router.post("/auth/verify-recovery", async (req: Request, res: Response): Promise<void> => {
-  const userId = req.signedCookies?.totp_pending as string | undefined;
+  const userId = getPendingUserId(req);
   if (!userId) { res.status(401).json({ error: "No pending login session" }); return; }
 
   const parsed = RecoveryCodeBody.safeParse(req.body);
@@ -338,7 +376,7 @@ router.post("/auth/recovery-codes/regenerate", requireAuth, async (req: Request,
 
 // POST /auth/totp/enroll
 router.post("/auth/totp/enroll", async (req: Request, res: Response): Promise<void> => {
-  const userId = req.signedCookies?.totp_pending as string | undefined;
+  const userId = getPendingUserId(req);
   if (!userId) { res.status(401).json({ error: "No pending login session" }); return; }
   const users = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   const user = users[0];
@@ -353,7 +391,7 @@ router.post("/auth/totp/enroll", async (req: Request, res: Response): Promise<vo
 
 // POST /auth/totp/confirm
 router.post("/auth/totp/confirm", async (req: Request, res: Response): Promise<void> => {
-  const userId = req.signedCookies?.totp_pending as string | undefined;
+  const userId = getPendingUserId(req);
   if (!userId) { res.status(401).json({ error: "No pending login session" }); return; }
   const parsed = TotpCodeBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid TOTP code" }); return; }

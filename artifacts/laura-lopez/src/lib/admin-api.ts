@@ -1,9 +1,28 @@
 /**
  * Thin fetch wrapper for admin API calls.
- * Uses the same origin — cookies are sent automatically.
+ * Cookies are sent automatically where supported. In cross-origin iframe contexts
+ * (e.g. Replit preview) Chrome blocks SameSite=None cookies, so the pending auth
+ * token is also stored in sessionStorage and sent as X-Pending-Token header.
  */
 
 const API_BASE = "/api";
+
+// ---------------------------------------------------------------------------
+// Pending token — cookie-less fallback for iframe/third-party-cookie-blocked contexts
+// ---------------------------------------------------------------------------
+const PENDING_TOKEN_KEY = "admin_pending_token";
+
+export function storePendingToken(token: string): void {
+  try { sessionStorage.setItem(PENDING_TOKEN_KEY, token); } catch { /* private browsing */ }
+}
+
+export function clearPendingToken(): void {
+  try { sessionStorage.removeItem(PENDING_TOKEN_KEY); } catch { /* ignore */ }
+}
+
+function readPendingToken(): string | null {
+  try { return sessionStorage.getItem(PENDING_TOKEN_KEY); } catch { return null; }
+}
 
 export class ApiError extends Error {
   constructor(
@@ -20,8 +39,10 @@ export async function apiFetch<T = unknown>(
   options: RequestInit & { json?: unknown } = {},
 ): Promise<T> {
   const { json, headers: extraHeaders, ...rest } = options;
+  const pendingToken = readPendingToken();
   const headers: Record<string, string> = {
     ...(json != null ? { "Content-Type": "application/json" } : {}),
+    ...(pendingToken ? { "X-Pending-Token": pendingToken } : {}),
     ...(extraHeaders as Record<string, string> | undefined),
   };
 
@@ -78,7 +99,7 @@ export interface CurrentUser {
 export const authApi = {
   me: () => apiFetch<{ user: CurrentUser }>("/auth/me"),
   login: (email: string, password: string) =>
-    apiFetch<{ requiresTotp: boolean; requiresTotpSetup: boolean }>("/auth/login", {
+    apiFetch<{ requiresTotp: boolean; requiresTotpSetup: boolean; pendingToken?: string }>("/auth/login", {
       method: "POST",
       json: { email, password },
     }),
