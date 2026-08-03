@@ -1,21 +1,66 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { authApi, ApiError } from "@/lib/admin-api";
+import { authApi, settingsApi, ApiError } from "@/lib/admin-api";
 
 export default function AdminSettings() {
   const qc = useQueryClient();
-  const [newCodes, setNewCodes] = useState<string[] | null>(null);
-  const [copiedAll, setCopiedAll] = useState(false);
+  const [newCodes,     setNewCodes]     = useState<string[] | null>(null);
+  const [copiedAll,    setCopiedAll]    = useState(false);
   const [confirmRegen, setConfirmRegen] = useState(false);
 
-  const { data: countData, isLoading } = useQuery({
+  // DRE / brokerage settings
+  const { data: settingsData, isLoading: settingsLoading } = useQuery({
+    queryKey: ["admin-settings"],
+    queryFn:  () => settingsApi.list(),
+  });
+  const settings = settingsData?.settings ?? {};
+  const [dreLicense,    setDreLicense]    = useState("");
+  const [brokerageName, setBrokerageName] = useState("");
+  const [agentName,     setAgentName]     = useState("");
+  const [settingsDirty, setSettingsDirty] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsError,  setSettingsError]  = useState("");
+  const [settingsSaved,  setSettingsSaved]  = useState(false);
+
+  // Populate fields once loaded
+  const [initialized, setInitialized] = useState(false);
+  if (!settingsLoading && !initialized && settingsData) {
+    setDreLicense(settings["dre_license"]    ?? "");
+    setBrokerageName(settings["brokerage_name"] ?? "");
+    setAgentName(settings["agent_name"]      ?? "");
+    setInitialized(true);
+  }
+
+  async function saveSettings() {
+    if (!dreLicense.trim())    { setSettingsError("DRE license is required."); return; }
+    if (!brokerageName.trim()) { setSettingsError("Brokerage name is required."); return; }
+    setSettingsSaving(true); setSettingsError(""); setSettingsSaved(false);
+    try {
+      await settingsApi.put({
+        dre_license:    dreLicense.trim(),
+        brokerage_name: brokerageName.trim(),
+        ...(agentName.trim() ? { agent_name: agentName.trim() } : {}),
+      });
+      void qc.invalidateQueries({ queryKey: ["admin-settings"] });
+      setSettingsDirty(false);
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 3000);
+    } catch (e) {
+      setSettingsError(e instanceof ApiError ? e.message : "Save failed.");
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  // Recovery codes
+  const { data: countData, isLoading: codesLoading } = useQuery({
     queryKey: ["recovery-codes-count"],
-    queryFn: () => authApi.recoveryCodes.count(),
+    queryFn:  () => authApi.recoveryCodes.count(),
   });
 
   const regenerate = useMutation({
     mutationFn: () => authApi.recoveryCodes.regenerate(),
-    onSuccess: (res) => {
+    onSuccess:  (res) => {
       setNewCodes(res.recoveryCodes);
       setConfirmRegen(false);
       void qc.invalidateQueries({ queryKey: ["recovery-codes-count"] });
@@ -34,10 +79,69 @@ export default function AdminSettings() {
     <div className="max-w-lg space-y-6">
       <div>
         <h1 className="text-lg font-semibold text-foreground mb-1">Settings</h1>
-        <p className="text-sm text-muted-foreground">Account security configuration.</p>
+        <p className="text-sm text-muted-foreground">Account and compliance configuration.</p>
       </div>
 
-      {/* Recovery codes */}
+      {/* ── DRE / Compliance ─────────────────────────────────────────── */}
+      <div className="border border-border bg-card p-5 space-y-4">
+        <div>
+          <h2 className="text-sm font-medium text-foreground uppercase tracking-wider">
+            DRE & Brokerage
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Required on every generated marketing asset. DRE license number and brokerage name
+            must be set before generating campaign content.
+          </p>
+        </div>
+
+        {settingsError && <p className="text-xs text-destructive">{settingsError}</p>}
+        {settingsSaved  && <p className="text-xs text-green-700">Settings saved.</p>}
+
+        <div className="space-y-3">
+          <div>
+            <label className="block font-sans text-xs text-muted-foreground mb-1">
+              DRE License Number *
+            </label>
+            <input
+              value={dreLicense}
+              onChange={(e) => { setDreLicense(e.target.value); setSettingsDirty(true); }}
+              placeholder="e.g. 01234567"
+              className="w-full border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="block font-sans text-xs text-muted-foreground mb-1">
+              Brokerage Name *
+            </label>
+            <input
+              value={brokerageName}
+              onChange={(e) => { setBrokerageName(e.target.value); setSettingsDirty(true); }}
+              placeholder="e.g. The Beverly Hills Estates"
+              className="w-full border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="block font-sans text-xs text-muted-foreground mb-1">
+              Agent Display Name (optional — defaults to account name)
+            </label>
+            <input
+              value={agentName}
+              onChange={(e) => { setAgentName(e.target.value); setSettingsDirty(true); }}
+              placeholder="e.g. Laura Lopez"
+              className="w-full border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <button
+            onClick={saveSettings}
+            disabled={settingsSaving || !settingsDirty}
+            className="px-4 py-2 bg-primary text-primary-foreground font-sans text-xs uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50"
+          >
+            {settingsSaving ? "Saving…" : "Save Settings"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Recovery codes ───────────────────────────────────────────── */}
       <div className="border border-border bg-card p-5 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -50,7 +154,7 @@ export default function AdminSettings() {
             </p>
           </div>
           <div className="shrink-0 text-right">
-            {isLoading ? (
+            {codesLoading ? (
               <span className="text-xs text-muted-foreground">Loading…</span>
             ) : (
               <>
@@ -63,7 +167,6 @@ export default function AdminSettings() {
           </div>
         </div>
 
-        {/* Show newly generated codes */}
         {newCodes && (
           <div className="space-y-3">
             <div className="bg-amber-50 border border-amber-200 p-3">
@@ -72,9 +175,7 @@ export default function AdminSettings() {
               </p>
               <div className="space-y-1">
                 {newCodes.map((c) => (
-                  <p key={c} className="font-mono text-sm tracking-widest text-foreground">
-                    {c}
-                  </p>
+                  <p key={c} className="font-mono text-sm tracking-widest text-foreground">{c}</p>
                 ))}
               </div>
             </div>
@@ -129,9 +230,7 @@ export default function AdminSettings() {
                 </div>
                 {regenerate.isError && (
                   <p className="text-xs text-destructive">
-                    {regenerate.error instanceof ApiError
-                      ? regenerate.error.message
-                      : "Something went wrong"}
+                    {regenerate.error instanceof ApiError ? regenerate.error.message : "Something went wrong"}
                   </p>
                 )}
               </div>

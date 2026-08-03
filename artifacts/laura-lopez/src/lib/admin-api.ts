@@ -522,3 +522,164 @@ export const contentApi = {
       apiFetch<{ slot: AdminSlot }>(`/admin/slots/${slotKey}/revert`, { method: "POST" }),
   },
 };
+
+// ---------------------------------------------------------------------------
+// Settings API
+// ---------------------------------------------------------------------------
+export const settingsApi = {
+  list: () => apiFetch<{ settings: Record<string, string> }>("/admin/settings"),
+  put:  (settings: Record<string, string>) =>
+    apiFetch<{ settings: Record<string, string> }>("/admin/settings", { method: "PUT", json: settings }),
+};
+
+// ---------------------------------------------------------------------------
+// Campaign types
+// ---------------------------------------------------------------------------
+export type CampaignStatus   = "active" | "complete" | "cancelled";
+export type CampaignTrigger  = "new_listing" | "price_change" | "open_house" | "sold";
+export type CampaignChannel  = "instagram_post" | "instagram_story" | "email" | "postcard" | "mailer" | "voicemail" | "manual";
+export type TaskStatus       = "pending" | "ready" | "done" | "skipped";
+export type AssetStatus      = "draft" | "approved" | "rejected";
+
+export interface CampaignTemplate {
+  id:        string;
+  ownerId:   string;
+  name:      string;
+  trigger:   CampaignTrigger;
+  isDefault: boolean;
+  createdAt: string;
+  items:     CampaignTemplateItem[];
+}
+
+export interface CampaignTemplateItem {
+  id:         string;
+  templateId: string;
+  label:      string;
+  channel:    CampaignChannel;
+  offsetDays: number;
+  dayType:    "calendar" | "business";
+  assetType:  string | null;
+  sortOrder:  number;
+}
+
+export interface Campaign {
+  id:          string;
+  ownerId:     string;
+  propertyId:  string;
+  templateId:  string | null;
+  trigger:     CampaignTrigger;
+  anchorDate:  string;
+  status:      CampaignStatus;
+  createdAt:   string;
+  completedAt: string | null;
+}
+
+export interface CampaignSummary extends Campaign {
+  propertyAddress: string;
+  tasksDone:       number;
+  tasksTotal:      number;
+  nextDueDate:     string | null;
+}
+
+export interface CampaignTask {
+  id:           string;
+  campaignId:   string;
+  ownerId:      string;
+  label:        string;
+  channel:      CampaignChannel;
+  assetType:    string | null;
+  computedDate: string | null;
+  overrideDate: string | null;
+  effectiveDate?: string | null;
+  overdue?:     boolean;
+  status:       TaskStatus;
+  assetId:      string | null;
+  notes:        string | null;
+  completedAt:  string | null;
+  sortOrder:    number;
+}
+
+export interface CampaignAsset {
+  id:          string;
+  ownerId:     string;
+  campaignId:  string;
+  taskId:      string;
+  assetType:   string;
+  storageKey:  string | null;
+  textContent: string | null;
+  status:      AssetStatus;
+  approvedAt:  string | null;
+  approvedBy:  string | null;
+  createdAt:   string;
+  url?:        string | null;
+}
+
+export interface CampaignPreviewTask {
+  templateItemId: string;
+  label:          string;
+  channel:        CampaignChannel;
+  assetType:      string | null;
+  offsetDays:     number;
+  dayType:        string;
+  sortOrder:      number;
+  computedDate:   string | null;
+}
+
+export interface CampaignPreviewResponse {
+  template:   { id: string; name: string; trigger: CampaignTrigger };
+  property:   { id: string; address: string };
+  anchorDate: string;
+  tasks:      CampaignPreviewTask[];
+}
+
+// ---------------------------------------------------------------------------
+// Campaign API client
+// ---------------------------------------------------------------------------
+export const campaignApi = {
+  templates: {
+    list: () =>
+      apiFetch<{ templates: CampaignTemplate[] }>("/admin/campaign-templates"),
+    get: (id: string) =>
+      apiFetch<{ template: CampaignTemplate }>(`/admin/campaign-templates/${id}`),
+    create: (body: { name: string; trigger: CampaignTrigger; isDefault?: boolean; items?: Partial<CampaignTemplateItem>[] }) =>
+      apiFetch<{ template: CampaignTemplate }>("/admin/campaign-templates", { method: "POST", json: body }),
+    patch: (id: string, body: { name?: string; trigger?: CampaignTrigger; isDefault?: boolean }) =>
+      apiFetch<{ template: CampaignTemplate }>(`/admin/campaign-templates/${id}`, { method: "PATCH", json: body }),
+    delete: (id: string) =>
+      apiFetch<{ ok: boolean }>(`/admin/campaign-templates/${id}`, { method: "DELETE" }),
+  },
+
+  preview: (body: { propertyId: string; templateId: string; anchorDate: string }) =>
+    apiFetch<CampaignPreviewResponse>("/admin/campaigns/preview", { method: "POST", json: body }),
+
+  list: () =>
+    apiFetch<{ campaigns: CampaignSummary[] }>("/admin/campaigns"),
+
+  get: (id: string) =>
+    apiFetch<{ campaign: Campaign; tasks: CampaignTask[]; assets: CampaignAsset[]; property: AdminProperty | null }>(
+      `/admin/campaigns/${id}`,
+    ),
+
+  create: (body: { propertyId: string; templateId: string; anchorDate: string; trigger: CampaignTrigger }) =>
+    apiFetch<{ campaign: Campaign; tasks: CampaignTask[] }>("/admin/campaigns", { method: "POST", json: body }),
+
+  patch: (id: string, body: { status?: CampaignStatus }) =>
+    apiFetch<{ campaign: Campaign }>(`/admin/campaigns/${id}`, { method: "PATCH", json: body }),
+
+  delete: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/admin/campaigns/${id}`, { method: "DELETE" }),
+
+  events: (id: string) =>
+    apiFetch<{ events: unknown[] }>(`/admin/campaigns/${id}/events`),
+
+  tasks: {
+    patch: (taskId: string, body: { overrideDate?: string | null; status?: TaskStatus; notes?: string | null }) =>
+      apiFetch<{ task: CampaignTask }>(`/admin/campaign-tasks/${taskId}`, { method: "PATCH", json: body }),
+    generate: (taskId: string) =>
+      apiFetch<{ asset: CampaignAsset }>(`/admin/campaign-tasks/${taskId}/generate`, { method: "POST" }),
+    approve: (taskId: string) =>
+      apiFetch<{ asset: CampaignAsset }>(`/admin/campaign-tasks/${taskId}/approve`, { method: "POST" }),
+    reject: (taskId: string) =>
+      apiFetch<{ asset: CampaignAsset }>(`/admin/campaign-tasks/${taskId}/reject`, { method: "POST" }),
+  },
+};

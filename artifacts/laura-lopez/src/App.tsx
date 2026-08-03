@@ -24,6 +24,7 @@ import AdminContent from "@/pages/admin/Content";
 import AdminIntelligence from "@/pages/admin/Intelligence";
 import AdminContacts from "@/pages/admin/Contacts";
 import AdminSettings from "@/pages/admin/Settings";
+import AdminCampaigns from "@/pages/admin/Campaigns";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ function AdminRouter() {
               <Route path="/admin/content" component={AdminContent} />
               <Route path="/admin/intelligence" component={AdminIntelligence} />
               <Route path="/admin/contacts" component={AdminContacts} />
+              <Route path="/admin/campaigns" component={AdminCampaigns} />
               <Route path="/admin/settings/totp-setup" component={TotpSetup} />
               <Route path="/admin/settings" component={AdminSettings} />
               <Route component={NotFound} />

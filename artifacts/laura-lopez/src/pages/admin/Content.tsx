@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { marked } from "marked";
 import {
   contentApi,
+  campaignApi,
   type AdminArticle,
   type AdminMedia,
   type AdminProperty,
   type AdminSlot,
   type ArticleCategory,
   type SlotSuggestion,
+  type CampaignTemplate,
+  type CampaignPreviewTask,
 } from "../../lib/admin-api";
 import { ApiError } from "../../lib/admin-api";
 
@@ -274,6 +277,122 @@ function ArticlesTab() {
 }
 
 // ============================================================================
+// CAMPAIGN OFFER MODAL
+// ============================================================================
+function CampaignOfferModal({
+  propertyId,
+  propertyAddress,
+  onDone,
+}: {
+  propertyId:      string;
+  propertyAddress: string;
+  onDone:          () => void;
+}) {
+  const today       = new Date().toISOString().slice(0, 10);
+  const [anchorDate, setAnchorDate]       = useState(today);
+  const [templates, setTemplates]         = useState<CampaignTemplate[]>([]);
+  const [templateId, setTemplateId]       = useState("");
+  const [preview, setPreview]             = useState<CampaignPreviewTask[] | null>(null);
+  const [previewing, setPreviewing]       = useState(false);
+  const [creating, setCreating]           = useState(false);
+  const [error, setError]                 = useState("");
+
+  useEffect(() => {
+    campaignApi.templates.list().then((r) => {
+      setTemplates(r.templates);
+      const def = r.templates.find((t) => t.isDefault && t.trigger === "new_listing") ?? r.templates.find((t) => t.trigger === "new_listing");
+      if (def) setTemplateId(def.id);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!templateId || !anchorDate) return;
+    setPreviewing(true); setPreview(null);
+    campaignApi.preview({ propertyId, templateId, anchorDate })
+      .then((r) => setPreview(r.tasks))
+      .catch(() => setPreview([]))
+      .finally(() => setPreviewing(false));
+  }, [templateId, anchorDate, propertyId]);
+
+  async function startCampaign() {
+    if (!templateId) return;
+    setCreating(true); setError("");
+    try {
+      await campaignApi.create({ propertyId, templateId, anchorDate, trigger: "new_listing" });
+      onDone();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Failed to create campaign.");
+    } finally { setCreating(false); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-background border border-border w-full max-w-sm max-h-[90vh] overflow-y-auto p-5 space-y-4">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold">Start Listing Campaign?</h3>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{propertyAddress}</p>
+          </div>
+          <button onClick={onDone} className="text-muted-foreground hover:text-foreground">✕</button>
+        </div>
+
+        {templates.length > 1 && (
+          <div>
+            <label className="block font-sans text-xs text-muted-foreground mb-1">Template</label>
+            <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}
+              className="w-full border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary">
+              {templates.filter((t) => t.trigger === "new_listing").map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <label className="block font-sans text-xs text-muted-foreground mb-1">Anchor Date (listing date)</label>
+          <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)}
+            className="w-full border border-border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary" />
+        </div>
+
+        {previewing && <p className="text-xs text-muted-foreground">Loading preview…</p>}
+
+        {preview && preview.length > 0 && (
+          <div className="border border-border divide-y divide-border">
+            <p className="font-sans text-[10px] uppercase tracking-widest text-muted-foreground px-2 py-1.5">
+              {preview.length} tasks
+            </p>
+            {preview.map((task) => (
+              <div key={task.templateItemId} className="flex items-center gap-2 px-2 py-1.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">{task.label}</p>
+                  <p className="text-[10px] text-muted-foreground">{task.channel.replace(/_/g, " ")}</p>
+                </div>
+                <p className="text-[10px] font-mono text-muted-foreground shrink-0">
+                  {task.computedDate ? new Date(task.computedDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : `+${task.offsetDays}d`}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {error && <p className="text-xs text-destructive">{error}</p>}
+
+        <div className="flex gap-2">
+          <button onClick={startCampaign} disabled={creating || !templateId}
+            className="flex-1 px-3 py-2 bg-primary text-primary-foreground font-sans text-xs uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50">
+            {creating ? "Creating…" : "Start Campaign"}
+          </button>
+          <button onClick={onDone}
+            className="px-3 py-2 border border-border font-sans text-xs uppercase tracking-widest hover:bg-muted">
+            Skip
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // PROPERTIES TAB
 // ============================================================================
 function PropertiesTab() {
@@ -283,6 +402,8 @@ function PropertiesTab() {
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Campaign offer
+  const [campaignOffer, setCampaignOffer] = useState<{ propertyId: string; propertyAddress: string } | null>(null);
 
   // Form fields
   const [addr, setAddr] = useState(""); const [nbhd, setNbhd] = useState("");
@@ -348,9 +469,25 @@ function PropertiesTab() {
         architectureNotes: archNotes || null, lotNotes: lotNotes || null, valueNotes: valueNotes || null,
         featured, sortOrder: parseInt(sortOrder) || 0, archived,
       };
-      if (creating) await contentApi.properties.create(body);
-      else if (editing) await contentApi.properties.patch(editing.id, body);
+      const wasNotListed = creating || (editing && editing.status !== "listed");
+      let savedId: string | undefined;
+      if (creating) {
+        const res = await contentApi.properties.create(body);
+        savedId = res.property.id;
+      } else if (editing) {
+        await contentApi.properties.patch(editing.id, body);
+        savedId = editing.id;
+      }
       loadProps(); close();
+      // Offer campaign when status is now "listed" and it wasn't before
+      if (propStatus === "listed" && wasNotListed && savedId) {
+        // Only offer if no active new_listing campaign exists for this property
+        const { campaigns } = await campaignApi.list();
+        const existing = campaigns.find(
+          (c) => c.propertyId === savedId && c.trigger === "new_listing" && c.status !== "cancelled",
+        );
+        if (!existing) setCampaignOffer({ propertyId: savedId, propertyAddress: addr });
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Save failed.");
     } finally { setSaving(false); }
@@ -489,6 +626,14 @@ function PropertiesTab() {
             {saving ? "Saving…" : "Save Property"}
           </button>
         </div>
+      )}
+
+      {campaignOffer && (
+        <CampaignOfferModal
+          propertyId={campaignOffer.propertyId}
+          propertyAddress={campaignOffer.propertyAddress}
+          onDone={() => setCampaignOffer(null)}
+        />
       )}
 
       {loading && <p className="text-sm text-muted-foreground">Loading…</p>}

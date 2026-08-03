@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   X,
+  Megaphone,
 } from "lucide-react";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/admin/inquiries", label: "Inquiries", icon: MessageSquare, badge: true },
   { href: "/admin/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/admin/content", label: "Content", icon: FileText },
+  { href: "/admin/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/admin/intelligence", label: "Intelligence", icon: BarChart2 },
   { href: "/admin/contacts", label: "Contacts", icon: Users },
   { href: "/admin/settings", label: "Settings", icon: Settings },

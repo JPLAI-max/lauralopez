@@ -6,6 +6,9 @@ import mediaAdminRouter from "./media";
 import slotsAdminRouter from "./slots";
 import articlesAdminRouter from "./articles";
 import propertiesAdminRouter from "./properties";
+import settingsAdminRouter from "./settings";
+import campaignTemplatesAdminRouter from "./campaign-templates";
+import campaignsAdminRouter from "./campaigns";
 
 const router: IRouter = Router();
 
@@ -13,11 +16,14 @@ const router: IRouter = Router();
 // Applied at router level so no new route can accidentally ship unprotected.
 router.use(requireAuth, requireTotpEnrolled);
 
-router.use("/inquiries", inquiriesAdminRouter);
-router.use("/", transactionsAdminRouter);
-router.use("/media", mediaAdminRouter);
-router.use("/slots", slotsAdminRouter);
-router.use("/articles", articlesAdminRouter);
-router.use("/properties", propertiesAdminRouter);
+router.use("/inquiries",           inquiriesAdminRouter);
+router.use("/",                    transactionsAdminRouter);
+router.use("/media",               mediaAdminRouter);
+router.use("/slots",               slotsAdminRouter);
+router.use("/articles",            articlesAdminRouter);
+router.use("/properties",          propertiesAdminRouter);
+router.use("/settings",            settingsAdminRouter);
+router.use("/campaign-templates",  campaignTemplatesAdminRouter);
+router.use("/",                    campaignsAdminRouter);
 
 export default router;
