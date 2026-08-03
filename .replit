@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-24", "postgresql-16"]
 
 [deployment]
 router = "application"
@@ -36,3 +36,6 @@ externalPort = 3000
 [userenv.shared]
 INQUIRY_IP_SALT = "1daf12b169d8f1c175e8a2db903f82dcc7b3bf8628893b0ddb7d886788009d0c"
 API_PROXY_TARGET = "http://localhost:8080"
+
+[nix]
+channel = "stable-25_05"

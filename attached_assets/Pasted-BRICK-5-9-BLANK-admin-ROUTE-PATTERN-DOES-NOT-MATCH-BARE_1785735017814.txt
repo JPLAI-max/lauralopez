@@ -1,0 +1,64 @@
+BRICK 5.9 — BLANK /admin: ROUTE PATTERN DOES NOT MATCH BARE PATH
+
+Root cause, confirmed by reading App.tsx and the server logs.
+Do not re-diagnose.
+
+Server logs show totp/confirm returning 200, then NO
+/api/auth/me request at all. ProtectedRoute never mounts because
+AdminRouter's inner Switch has no route matching the bare path
+"/admin" — only "/admin/:rest*", which does not match it. The
+outer Switch in App.tsx already compensates with a separate
+<Route path="/admin"> ; the inner Switch was never given the
+same treatment. Result: empty render, blank page, zero requests.
+
+1. FIX THE ROUTE MATCH
+   In AdminRouter, the protected branch must match BOTH "/admin"
+   and "/admin/*". Extract the ProtectedRoute + AdminLayout +
+   inner Switch into a single component and register it for both
+   paths, rather than duplicating the JSX.
+
+   Verify by navigation, not by reading: /admin, /admin/,
+   /admin/inquiries, /admin/content, /admin/settings must all
+   render.
+
+2. ADD AN ERROR BOUNDARY
+   Create components/ErrorBoundary.tsx (class component with
+   componentDidCatch). Render the message, component stack, and
+   a reload button. Wrap AdminLayout's children and the whole
+   app in App.tsx. Log full stack to console.
+   A blank page must never again be the failure mode.
+
+3. ADD A ROUTE FALLBACK
+   AdminRouter's outer Switch must end with a catch-all that
+   renders NotFound. An unmatched admin path currently renders
+   nothing at all — that is how this stayed invisible.
+
+4. FIX THE ENROLL EFFECT RE-FIRING
+   Server logs show four POST /api/auth/totp/enroll calls in
+   seven seconds (05:13:24, :26, :30, :31). The useEffect in
+   TotpSetup is re-running. Each call generates a NEW TOTP secret
+   and resets lastTotpEpoch, silently invalidating the QR code
+   the user just scanned.
+
+   Guard it with a ref so enroll fires exactly ONCE per mount.
+   Do not rely on the dependency array alone — navigate is not
+   stable.
+
+   Additionally: /auth/totp/enroll must NOT overwrite an
+   existing unconfirmed secret if one was generated in the last
+   10 minutes. Return the existing one instead. Regenerating
+   mid-enrollment is a real user-facing failure.
+
+ACCEPTANCE
+1. Navigate to /admin -> dashboard renders. Screenshot.
+2. Server logs show a GET /api/auth/me firing on that load.
+   Paste the log line.
+3. /admin/inquiries, /admin/content, /admin/campaigns,
+   /admin/settings all render.
+4. An unmatched path like /admin/nonsense renders NotFound, not
+   a blank page.
+5. Deliberate throw in a child -> error boundary shows a
+   readable message.
+6. Load /admin/totp-setup with a fresh user -> exactly ONE
+   enroll request in the server logs. Paste them.
+7. Reload /admin while logged in -> stays logged in.

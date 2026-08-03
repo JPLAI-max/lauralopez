@@ -24,6 +24,28 @@ function readPendingToken(): string | null {
   try { return sessionStorage.getItem(PENDING_TOKEN_KEY); } catch { return null; }
 }
 
+// ---------------------------------------------------------------------------
+// Session token — cookie-less fallback for iframe/cross-origin contexts
+// ---------------------------------------------------------------------------
+// After verify-totp / totp/confirm / verify-recovery the API returns the plain
+// session UUID in the response body. We store it here and send it as
+// X-Session-Token on every request so requireAuth can validate it even when
+// the sid cookie is blocked (Chrome third-party cookie blocking in Replit's
+// cross-origin preview iframe).
+const SESSION_TOKEN_KEY = "admin_session_token";
+
+export function storeSessionToken(token: string): void {
+  try { sessionStorage.setItem(SESSION_TOKEN_KEY, token); } catch { /* private browsing */ }
+}
+
+export function clearSessionToken(): void {
+  try { sessionStorage.removeItem(SESSION_TOKEN_KEY); } catch { /* ignore */ }
+}
+
+function readSessionToken(): string | null {
+  try { return sessionStorage.getItem(SESSION_TOKEN_KEY); } catch { return null; }
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -40,9 +62,11 @@ export async function apiFetch<T = unknown>(
 ): Promise<T> {
   const { json, headers: extraHeaders, ...rest } = options;
   const pendingToken = readPendingToken();
+  const sessionToken = readSessionToken();
   const headers: Record<string, string> = {
     ...(json != null ? { "Content-Type": "application/json" } : {}),
     ...(pendingToken ? { "X-Pending-Token": pendingToken } : {}),
+    ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
     ...(extraHeaders as Record<string, string> | undefined),
   };
 
@@ -108,14 +132,14 @@ export const authApi = {
       json: { email, password },
     }),
   verifyTotp: (code: string) =>
-    apiFetch<{ ok: boolean }>("/auth/verify-totp", { method: "POST", json: { code } }),
+    apiFetch<{ ok: boolean; sessionToken?: string }>("/auth/verify-totp", { method: "POST", json: { code } }),
   verifyRecovery: (code: string) =>
-    apiFetch<{ ok: boolean }>("/auth/verify-recovery", { method: "POST", json: { code } }),
+    apiFetch<{ ok: boolean; sessionToken?: string }>("/auth/verify-recovery", { method: "POST", json: { code } }),
   logout: () => apiFetch<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   totpEnroll: () =>
     apiFetch<{ otpauthUrl: string; secret: string }>("/auth/totp/enroll", { method: "POST" }),
   totpConfirm: (code: string) =>
-    apiFetch<{ ok: boolean; recoveryCodes: string[] }>("/auth/totp/confirm", {
+    apiFetch<{ ok: boolean; recoveryCodes: string[]; sessionToken?: string }>("/auth/totp/confirm", {
       method: "POST",
       json: { code },
     }),

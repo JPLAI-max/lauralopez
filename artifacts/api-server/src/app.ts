@@ -37,7 +37,7 @@ app.use(cors({
   origin: true,
   // X-Pending-Token is sent by the frontend as a fallback when SameSite=None cookies
   // are blocked (e.g. Replit preview iframe / Chrome third-party cookie blocking).
-  allowedHeaders: ["Content-Type", "Authorization", "X-Pending-Token"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Pending-Token", "X-Session-Token"],
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

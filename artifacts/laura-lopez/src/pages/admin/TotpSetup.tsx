@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { authApi, ApiError, clearPendingToken } from "@/lib/admin-api";
+import { authApi, ApiError, clearPendingToken, storeSessionToken } from "@/lib/admin-api";
 import { useQueryClient } from "@tanstack/react-query";
 
 type Step = "enroll" | "confirm" | "recovery";
@@ -19,7 +19,16 @@ export default function TotpSetup() {
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [copiedAll, setCopiedAll] = useState(false);
 
+  // Guard the enroll call so it fires EXACTLY ONCE per mount regardless of
+  // how many times the component re-renders or how many React StrictMode
+  // double-invocations occur. navigate is intentionally omitted from deps —
+  // it is not stable and was causing repeated enroll calls (4× in 7 seconds)
+  // that each generated a NEW TOTP secret, silently invalidating the QR code.
+  const enrollCalledRef = useRef(false);
   useEffect(() => {
+    if (enrollCalledRef.current) return;
+    enrollCalledRef.current = true;
+
     authApi
       .totpEnroll()
       .then((r) => {
@@ -30,7 +39,6 @@ export default function TotpSetup() {
       .catch((err: unknown) => {
         console.error("[TotpSetup] enroll failed:", err);
         // Redirect to login only on 401 (no pending session).
-        // Any other error stays on this page so the user can see what went wrong.
         if (err instanceof ApiError && err.status === 401) {
           navigate("/admin/login");
         } else {
@@ -38,7 +46,7 @@ export default function TotpSetup() {
           setError(err instanceof Error ? err.message : "Could not load setup — please try again");
         }
       });
-  }, [navigate]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleConfirm(e: React.FormEvent) {
     e.preventDefault();
@@ -46,7 +54,8 @@ export default function TotpSetup() {
     setLoading(true);
     try {
       const res = await authApi.totpConfirm(code.replace(/\s/g, ""));
-      clearPendingToken(); // session cookie now active; pending token no longer needed
+      clearPendingToken();
+      if (res.sessionToken) storeSessionToken(res.sessionToken);
       setFailed(false);
       setRecoveryCodes(res.recoveryCodes);
       await qc.invalidateQueries({ queryKey: ["admin-me"] });

@@ -284,7 +284,10 @@ router.post("/auth/verify-totp", async (req: Request, res: Response): Promise<vo
   clearPendingCookie(res, req);
   setSessionCookie(res, req, session!.id);
   await logAuthEvent({ userId: user.id, email: user.email, action: "login", success: true, ipHash, userAgent: ua });
-  res.json({ ok: true });
+  // sessionToken is the plain session UUID returned in the body so clients
+  // in cross-origin iframe contexts (where the sid cookie is blocked) can
+  // store it in sessionStorage and send it as X-Session-Token header.
+  res.json({ ok: true, sessionToken: session!.id });
 });
 
 // POST /auth/verify-recovery — recovery code in place of TOTP
@@ -340,7 +343,7 @@ router.post("/auth/verify-recovery", async (req: Request, res: Response): Promis
 
   await logAuthEvent({ userId: user.id, email: user.email, action: "recovery_used", success: true, ipHash, userAgent: ua });
   await logAuthEvent({ userId: user.id, email: user.email, action: "login", success: true, ipHash, userAgent: ua });
-  res.json({ ok: true });
+  res.json({ ok: true, sessionToken: session!.id });
 });
 
 // POST /auth/logout
@@ -382,9 +385,32 @@ router.post("/auth/totp/enroll", async (req: Request, res: Response): Promise<vo
   const user = users[0];
   if (!user) { res.status(401).json({ error: "User not found" }); return; }
 
+  // Idempotency: if a fresh unconfirmed secret exists (set within the last
+  // 10 minutes), return it instead of generating a new one.  This prevents
+  // React StrictMode or unstable-navigate useEffect re-runs from silently
+  // invalidating the QR code the user just scanned.
+  const FRESH_WINDOW_MS = 10 * 60 * 1000;
+  if (
+    !user.totpEnabled &&
+    user.totpSecret &&
+    user.totpSecretSetAt &&
+    Date.now() - user.totpSecretSetAt.getTime() < FRESH_WINDOW_MS
+  ) {
+    let existing: string;
+    try { existing = decryptTotpSecret(user.totpSecret); }
+    catch { /* fall through to regenerate if decrypt fails */ existing = ""; }
+    if (existing) {
+      const otpauthUrl = generateURI({ issuer: "Laura Lopez Admin", label: user.email, secret: existing });
+      res.json({ otpauthUrl, secret: existing });
+      return;
+    }
+  }
+
   const secret = generateSecret();
   const encrypted = encryptTotpSecret(secret);
-  await db.update(usersTable).set({ totpSecret: encrypted, lastTotpEpoch: null }).where(eq(usersTable.id, user.id));
+  await db.update(usersTable)
+    .set({ totpSecret: encrypted, lastTotpEpoch: null, totpSecretSetAt: new Date() })
+    .where(eq(usersTable.id, user.id));
   const otpauthUrl = generateURI({ issuer: "Laura Lopez Admin", label: user.email, secret });
   res.json({ otpauthUrl, secret });
 });
@@ -423,7 +449,7 @@ router.post("/auth/totp/confirm", async (req: Request, res: Response): Promise<v
   await db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id));
   clearPendingCookie(res, req);
   setSessionCookie(res, req, session!.id);
-  res.json({ ok: true, recoveryCodes });
+  res.json({ ok: true, recoveryCodes, sessionToken: session!.id });
 });
 
 export default router;

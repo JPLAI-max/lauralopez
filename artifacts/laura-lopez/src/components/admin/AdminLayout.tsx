@@ -16,6 +16,7 @@ import {
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/lib/admin-api";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -162,7 +163,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
         {/* Page content */}
         <main className="flex-1 overflow-auto p-4 md:p-6">
-          {children}
+          <ErrorBoundary label="Admin page">
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

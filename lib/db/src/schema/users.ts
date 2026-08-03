@@ -18,6 +18,7 @@ export const usersTable = pgTable("users", {
   name: text("name").notNull(),
   role: text("role").notNull().default("admin"), // admin | staff
   totpSecret: text("totp_secret"), // AES-256-GCM encrypted; null until enrolled
+  totpSecretSetAt: timestamp("totp_secret_set_at", { withTimezone: true }), // when totpSecret was last written; used to detect fresh unconfirmed secrets
   totpEnabled: boolean("totp_enabled").notNull().default(false),
   lastTotpEpoch: integer("last_totp_epoch"), // TOTP time-step used on last successful verify; null until first use
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),

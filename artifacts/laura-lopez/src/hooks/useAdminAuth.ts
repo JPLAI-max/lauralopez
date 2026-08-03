@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { authApi, type CurrentUser } from "@/lib/admin-api";
+import { authApi, clearSessionToken, clearPendingToken, type CurrentUser } from "@/lib/admin-api";
 
 export function useAdminAuth() {
   const qc = useQueryClient();
@@ -14,6 +14,8 @@ export function useAdminAuth() {
   const logout = useMutation({
     mutationFn: () => authApi.logout(),
     onSuccess: () => {
+      clearSessionToken();
+      clearPendingToken();
       qc.clear();
     },
   });

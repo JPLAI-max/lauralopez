@@ -29,7 +29,13 @@ export async function requireAuth(
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const sessionId = req.signedCookies?.sid as string | undefined;
+  // Try signed cookie first; fall back to X-Session-Token header for
+  // cross-origin iframe contexts where Chrome blocks SameSite=None cookies
+  // (e.g. Replit preview pane). The header carries the plain session UUID,
+  // which is validated against the DB just like the cookie path.
+  const sessionId =
+    (req.signedCookies?.sid as string | undefined) ??
+    (req.headers["x-session-token"] as string | undefined);
 
   if (!sessionId) {
     res.status(401).json({ error: "Authentication required" });

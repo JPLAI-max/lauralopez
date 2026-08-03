@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { authApi, ApiError, storePendingToken, clearPendingToken } from "@/lib/admin-api";
+import { authApi, ApiError, storePendingToken, clearPendingToken, storeSessionToken, clearSessionToken } from "@/lib/admin-api";
 import { useQueryClient } from "@tanstack/react-query";
 
 type Step = "credentials" | "totp";
@@ -48,8 +48,9 @@ export default function AdminLogin() {
     setFailed(false);
     setLoading(true);
     try {
-      await authApi.verifyTotp(totpCode.replace(/\s/g, ""));
+      const res = await authApi.verifyTotp(totpCode.replace(/\s/g, ""));
       clearPendingToken();
+      if (res.sessionToken) storeSessionToken(res.sessionToken);
       await qc.invalidateQueries({ queryKey: ["admin-me"] });
       navigate("/admin");
     } catch (err) {

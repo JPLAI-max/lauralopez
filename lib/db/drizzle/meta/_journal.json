@@ -15,6 +15,27 @@
       "when": 1785746400000,
       "tag": "0001_brick5_campaign_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785763200000,
+      "tag": "0002_brick52_marketing_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785763200001,
+      "tag": "0003_brick53_storage_provider",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785805200000,
+      "tag": "0004_brick59_totp_secret_set_at",
+      "breakpoints": true
     }
   ]
 }

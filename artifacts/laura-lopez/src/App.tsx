@@ -15,6 +15,7 @@ import Sold from "@/pages/Sold";
 // Admin
 import AdminLayout from "@/components/admin/AdminLayout";
 import { ProtectedRoute } from "@/components/admin/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import AdminLogin from "@/pages/admin/Login";
 import TotpSetup from "@/pages/admin/TotpSetup";
 import AdminDashboard from "@/pages/admin/Dashboard";
@@ -45,6 +46,29 @@ function PublicRouter() {
   );
 }
 
+/** Shared shell: ProtectedRoute + AdminLayout + page Switch.
+ *  Registered for both "/admin" (bare) and "/admin/:rest*" so both match. */
+function AdminProtectedShell() {
+  return (
+    <ProtectedRoute>
+      <AdminLayout>
+        <Switch>
+          <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/inquiries" component={AdminInquiries} />
+          <Route path="/admin/transactions" component={AdminTransactions} />
+          <Route path="/admin/content" component={AdminContent} />
+          <Route path="/admin/intelligence" component={AdminIntelligence} />
+          <Route path="/admin/contacts" component={AdminContacts} />
+          <Route path="/admin/campaigns" component={AdminCampaigns} />
+          <Route path="/admin/settings/totp-setup" component={TotpSetup} />
+          <Route path="/admin/settings" component={AdminSettings} />
+          <Route component={NotFound} />
+        </Switch>
+      </AdminLayout>
+    </ProtectedRoute>
+  );
+}
+
 function AdminRouter() {
   return (
     <Switch>
@@ -52,43 +76,32 @@ function AdminRouter() {
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/totp-setup" component={TotpSetup} />
 
-      {/* Protected admin routes — all wrapped in ProtectedRoute + AdminLayout */}
-      <Route path="/admin/:rest*">
-        <ProtectedRoute>
-          <AdminLayout>
-            <Switch>
-              <Route path="/admin" component={AdminDashboard} />
-              <Route path="/admin/inquiries" component={AdminInquiries} />
-              <Route path="/admin/transactions" component={AdminTransactions} />
-              <Route path="/admin/content" component={AdminContent} />
-              <Route path="/admin/intelligence" component={AdminIntelligence} />
-              <Route path="/admin/contacts" component={AdminContacts} />
-              <Route path="/admin/campaigns" component={AdminCampaigns} />
-              <Route path="/admin/settings/totp-setup" component={TotpSetup} />
-              <Route path="/admin/settings" component={AdminSettings} />
-              <Route component={NotFound} />
-            </Switch>
-          </AdminLayout>
-        </ProtectedRoute>
-      </Route>
+      {/* Protected admin routes — bare /admin AND any sub-path */}
+      <Route path="/admin" component={AdminProtectedShell} />
+      <Route path="/admin/:rest*" component={AdminProtectedShell} />
+
+      {/* Catch-all: unknown /admin/... paths → NotFound, not blank */}
+      <Route component={NotFound} />
     </Switch>
   );
 }
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Switch>
-            <Route path="/admin/:rest*" component={AdminRouter} />
-            <Route path="/admin" component={AdminRouter} />
-            <Route component={PublicRouter} />
-          </Switch>
-        </WouterRouter>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary label="App">
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Switch>
+              <Route path="/admin/:rest*" component={AdminRouter} />
+              <Route path="/admin" component={AdminRouter} />
+              <Route component={PublicRouter} />
+            </Switch>
+          </WouterRouter>
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -1,0 +1,53 @@
+BRICK 5.8 — BLANK SCREEN AFTER TOTP ENROLLMENT
+
+Enrollment succeeds — totp/confirm sets totpEnabled, creates a
+session, and issues the sid cookie. The blank screen is a React
+render crash on /admin. There is NO error boundary in the app,
+so any thrown error unmounts the tree and leaves a white page
+with no indication of what happened.
+
+1. ADD AN ERROR BOUNDARY — do this first
+   Create components/ErrorBoundary.tsx (class component with
+   componentDidCatch). Render the error message, the component
+   stack, and a reload button. Wrap:
+     - AdminLayout's children, so an admin page crash does not
+       kill the shell
+     - the whole app in App.tsx as a last resort
+   Log the error to console with full stack.
+
+   Never let a crash present as a blank page again.
+
+2. FIND AND FIX THE DASHBOARD CRASH
+   With the boundary in place, load /admin and read the actual
+   error. Likely candidates, verify rather than assume:
+     - Dashboard reads a field on a null/undefined API response
+       before loading completes
+     - A staleness card computes days from a null assignedAt
+     - .map or .toFixed on a value that is null when a table is
+       empty
+     - A count query returning undefined rather than 0
+
+   Fix the actual thrown error. Report what it was.
+
+3. HARDEN THE DASHBOARD AGAINST EMPTY DATA
+   Every admin page must render correctly with ZERO rows in
+   every table. No transactions, no campaigns, no inquiries, no
+   slot assignments. Empty state text, not a crash.
+   Test this explicitly — it is the state a brand new account is
+   always in.
+
+4. LOADING STATES
+   Confirm each admin page renders a loading state while its
+   queries are in flight rather than attempting to read
+   undefined data.
+
+ACCEPTANCE
+1. /admin loads and renders the dashboard. Screenshot.
+2. Paste the actual error that was being thrown.
+3. Force a deliberate throw in a child component -> the error
+   boundary catches it and shows a readable message, not a blank
+   page.
+4. Every admin section loads with empty tables and shows an
+   empty state.
+5. Reloading /admin while logged in stays logged in (session
+   cookie persists).
