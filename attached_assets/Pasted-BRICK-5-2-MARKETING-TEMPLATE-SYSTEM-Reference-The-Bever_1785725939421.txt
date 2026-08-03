@@ -1,0 +1,164 @@
+BRICK 5.2 — MARKETING TEMPLATE SYSTEM
+
+Reference: The Beverly Hills Estates story format. Two examples
+supplied. Match it exactly — this is an inherited brand system,
+not a redesign.
+
+────────────────────────────────────────
+1. SCHEMA — lib/db/src/schema/marketing.ts
+────────────────────────────────────────
+marketing_templates
+  id, ownerId, officeId
+  key            text notNull          // "story.just_sold"
+  name           text notNull
+  channel        text notNull          // instagram_story | ...
+  version        integer notNull default 1
+  canvasWidth    integer notNull
+  canvasHeight   integer notNull
+  definition     jsonb notNull         // layer array, see below
+  requiredFields jsonb notNull         // string[]
+  photoAspect    numeric(6,4) notNull  // what photo it wants
+  isActive       boolean notNull default true
+  createdAt
+
+  unique on (key, version)
+
+Templates are DATA, not code. A new version is a new row —
+never mutate an existing version. campaign_assets records
+templateId AND version so approved assets stay reproducible.
+
+────────────────────────────────────────
+2. SLOT CONTRACT
+────────────────────────────────────────
+requiredFields for story.just_sold:
+  ["heroImage","headline","address","city","price",
+   "brokerageMark","roleLine","agentName"]
+
+Render fails with a clear error if any required field is null or
+empty. It must NOT render a blank space or drop the layer.
+
+Fields are supplied by the generator from the properties row.
+The model never writes a number — see Brick 5 section 3.
+
+────────────────────────────────────────
+3. STORY TEMPLATE SPEC — 1080 x 1920
+────────────────────────────────────────
+All positions as percentages of canvas height. Centered
+horizontally. All text pure white (#FFFFFF). NO gold in story
+templates.
+
+LAYER 1 — photo
+  Cover-fit, cropped using the media row's focalX/focalY.
+
+LAYER 2 — top scrim (REQUIRED, non-optional)
+  Linear gradient, black, 0% to 34% of height.
+  Opacity 0.32 at top -> 0 at bottom.
+  This is what makes the template survive photos without sky.
+  Do not make it configurable off.
+
+LAYER 3 — bottom scrim
+  Linear gradient, black, 78% to 100% of height.
+  Opacity 0 -> 0.42.
+
+LAYER 4 — headline block
+  headline    y 14.5%   72px   caps   tracking 0.02em  weight 300
+  rule        y 16.8%   120x1px  white at 70% opacity, centered
+  address     y 19.0%   34px   caps   tracking 0.18em  weight 400
+  subline     y 21.5%   26px   caps   tracking 0.14em  weight 300
+              format: "{city} | LP {price}"  — pipe with spaces
+
+LAYER 5 — signature block
+  brokerageMark  y 88.5%   width 36% of canvas, centered
+                 BHE wordmark asset, white version
+  roleLine       y 91.5%   21px  caps  tracking 0.20em  weight 300
+  agentName      y 94.0%   22px  caps  tracking 0.16em  weight 400
+
+Typeface: the site's display serif at Light/300 for headline and
+subline, Regular/400 for address and name. If the exact BHE face
+is unavailable, use Cormorant Garamond — closest match in the
+existing stack.
+
+Headline max 18 characters. If longer, reduce to 60px rather
+than wrapping. NEVER wrap the headline to two lines.
+
+────────────────────────────────────────
+4. TEMPLATE VARIANTS — same geometry, different headline/role
+────────────────────────────────────────
+  story.just_sold      headline "JUST SOLD"      subline city|LP price
+  story.just_listed    headline "JUST LISTED"    subline city|LP price
+  story.open_house     headline "OPEN TODAY {time}"  subline city only
+  story.price_improved headline "PRICE IMPROVED" subline city|LP price
+  story.in_escrow      headline "IN ESCROW"      subline city only
+
+roleLine values: "LISTED BY" | "REPRESENTED BUYER" |
+"REPRESENTED SELLER" — set per campaign, not hardcoded.
+
+Build story.just_sold FIRST and completely. The other four are
+the same definition with different text once it renders
+correctly.
+
+────────────────────────────────────────
+5. POST TEMPLATE — 1080 x 1080
+────────────────────────────────────────
+Same system, compressed. Headline block at 17-26%, signature at
+84-94%. Same scrims, same type scale reduced 12%. Photo aspect
+1:1.
+
+────────────────────────────────────────
+6. PHOTO SELECTION BY ASPECT
+────────────────────────────────────────
+Each template declares photoAspect. When generating, select from
+that property's gallery (property_media) the image whose
+aspectRatio is closest to photoAspect, falling back to
+heroMediaId. Reuse the matching logic from
+media/slot-suggestions — do not write a second implementation.
+
+Always crop using focalX/focalY. Never center-crop.
+
+────────────────────────────────────────
+7. RENDERING
+────────────────────────────────────────
+Render with sharp + SVG composite. No headless browser.
+
+Fonts must be embedded in the SVG or registered with sharp —
+verify the rendered output actually uses the serif and has NOT
+silently fallen back to a system font. Check this visually, not
+by reading code.
+
+Output PNG at the canvas dimensions, then a WebP derivative.
+
+────────────────────────────────────────
+8. LICENSE DISCLOSURE — amendment to Brick 5 section 4
+────────────────────────────────────────
+For instagram_post and instagram_story: the DRE license number
+and brokerage name are required in the CAPTION, not burned into
+the image. Caption generation must append them and fail if the
+settings values are blank.
+
+For postcard, mailer, and email: unchanged — required on the
+artifact itself.
+
+────────────────────────────────────────
+9. ADMIN PREVIEW
+────────────────────────────────────────
+Template picker in the campaign task view showing live thumbnail
+previews rendered with that property's real data. Switching
+template re-renders. Nothing saves until approve.
+
+────────────────────────────────────────
+ACCEPTANCE
+────────────────────────────────────────
+1.  story.just_sold renders at 1080x1920 matching the reference
+    layout. Paste the output image.
+2.  Render against a photo with NO sky at top — headline must
+    remain legible via the scrim. Paste it.
+3.  Missing price -> render FAILS with a clear error, does not
+    output with a gap.
+4.  Headline of 24 characters shrinks to 60px, does not wrap.
+5.  Off-center focalX/focalY visibly changes the crop.
+6.  Rendered text uses the serif, not a system fallback —
+    confirm visually.
+7.  Caption for a story includes the license number; blank
+    license setting fails caption generation.
+8.  Creating version 2 of a template leaves already-approved
+    assets referencing version 1 unchanged.
