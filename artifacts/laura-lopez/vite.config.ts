@@ -18,6 +18,26 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+// The API server runs on a separate port. In dev, Vite proxies /api/* there so
+// the browser only ever talks to one origin (no CORS, cookies just work).
+const apiProxyTarget = process.env.API_PROXY_TARGET;
+
+if (!apiProxyTarget) {
+  throw new Error(
+    "API_PROXY_TARGET is required (e.g. http://localhost:8080 — the API server's " +
+    "local base URL). Set it in Replit's environment variables before starting the " +
+    "Vite dev server.",
+  );
+}
+
+const apiProxy = {
+  "/api": {
+    target: apiProxyTarget,
+    changeOrigin: true,
+    secure: false,
+  },
+} as const;
+
 const basePath = process.env.BASE_PATH;
 
 if (!basePath) {
@@ -63,6 +83,7 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: apiProxy,
     fs: {
       strict: true,
     },
@@ -71,5 +92,6 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: apiProxy,
   },
 });

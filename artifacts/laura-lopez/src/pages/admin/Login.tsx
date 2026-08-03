@@ -53,14 +53,24 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    <div
+      className="min-h-screen flex items-center justify-center p-4 relative"
+      style={{
+        backgroundImage: "url('/images/admin-bg.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
+      {/* dark overlay so the card stays readable */}
+      <div className="absolute inset-0 bg-black/60" />
+
+      <div className="w-full max-w-sm relative z-10">
         <div className="mb-8 text-center">
-          <h1 className="font-serif text-2xl text-primary">Laura Lopez</h1>
-          <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">Admin Access</p>
+          <h1 className="font-serif text-2xl text-white">Laura Lopez</h1>
+          <p className="text-xs text-white/60 uppercase tracking-widest mt-1">Admin Access</p>
         </div>
 
-        <div className="bg-card border border-border p-6">
+        <div className="bg-black/40 backdrop-blur-sm border border-white/20 p-6">
           {step === "credentials" ? (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>

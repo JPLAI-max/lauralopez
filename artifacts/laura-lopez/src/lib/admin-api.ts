@@ -32,7 +32,17 @@ export async function apiFetch<T = unknown>(
     ...rest,
   });
 
+  const ct = res.headers.get("content-type") ?? "";
+  const isJson = ct.includes("application/json");
+
   if (!res.ok) {
+    // Non-JSON error bodies (e.g. HTML from a proxy / gateway) get a clear message
+    if (!isJson) {
+      throw new ApiError(
+        res.status,
+        `API unreachable — expected JSON, received ${ct || "unknown content-type"}`,
+      );
+    }
     let msg = res.statusText;
     try {
       const data = await res.json();
@@ -42,8 +52,15 @@ export async function apiFetch<T = unknown>(
   }
 
   // 204 / no-content
-  const ct = res.headers.get("content-type") ?? "";
-  if (!ct.includes("application/json")) return undefined as T;
+  if (res.status === 204) return undefined as T;
+
+  // 2xx but not JSON — proxy is up but returning the wrong thing (e.g. Vite index.html)
+  if (!isJson) {
+    throw new ApiError(
+      res.status,
+      `API unreachable — expected JSON, received ${ct || "unknown content-type"}`,
+    );
+  }
   return res.json() as Promise<T>;
 }
 

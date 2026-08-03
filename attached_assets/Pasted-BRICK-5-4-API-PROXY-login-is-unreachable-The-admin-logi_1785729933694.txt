@@ -1,0 +1,68 @@
+BRICK 5.4 — API PROXY (login is unreachable)
+
+The admin login does nothing because the frontend cannot reach
+the API server. admin-api.ts calls relative /api/* paths, but
+vite.config.ts has no server.proxy — so /api requests are served
+by Vite and return the HTML index instead of JSON. The fetch
+then fails silently.
+
+1. ADD A DEV PROXY
+   In artifacts/laura-lopez/vite.config.ts, inside server (and
+   also inside preview), add:
+
+     proxy: {
+       "/api": {
+         target: process.env.API_PROXY_TARGET ?? "http://localhost:3001",
+         changeOrigin: true,
+         secure: false,
+       },
+     }
+
+   Read the API server's actual port from its config rather than
+   assuming 3001 — check artifacts/api-server for the PORT it
+   binds and match it. If the two artifacts run on Replit-
+   assigned ports, resolve the target from the environment, and
+   throw a clear startup error if it cannot be determined. Do
+   NOT silently fall back to a guess.
+
+2. COOKIES MUST SURVIVE THE PROXY
+   Sessions use a signed httpOnly cookie. Confirm the proxy
+   forwards Set-Cookie on the response and Cookie on subsequent
+   requests. If the API sets the cookie with a Domain attribute
+   that does not match the proxied origin, the browser will drop
+   it — verify the cookie actually appears in devtools
+   Application > Cookies after a successful login.
+
+3. FAIL LOUDLY IN THE UI
+   In ContactForm and in the admin login page, a non-JSON
+   response currently produces a silent failure. Add handling:
+   if the response content-type is not application/json, throw
+   an ApiError with a clear message ("API unreachable — expected
+   JSON, received {contentType}"). Surface it in the login form
+   as a visible error.
+
+   A login button that does nothing is worse than one that says
+   what broke.
+
+4. VERIFY THE API IS ACTUALLY RUNNING
+   Confirm both artifacts start under the current Replit run
+   configuration. If only the frontend starts, fix the run
+   config so the API server starts too, and report what you
+   changed.
+
+ACCEPTANCE
+1.  curl the health endpoint through the frontend origin:
+    /api/healthz returns JSON, not HTML.
+2.  Login with a WRONG password -> visible "Invalid credentials"
+    error in the UI. Paste a screenshot or the response.
+3.  Login with the correct password -> advances to the TOTP
+    step.
+4.  After full login, a session cookie named sid is present in
+    devtools Application > Cookies for the app origin.
+5.  /api/auth/me returns the user, not HTML.
+6.  Stop the API server -> login shows a clear "API unreachable"
+    error rather than doing nothing.
+7.  Public contact form still submits successfully through the
+    proxy.
+
+Report each with evidence.
