@@ -27,11 +27,15 @@ export default function TotpSetup() {
         setStep("confirm");
       })
       .catch((err: unknown) => {
-        // Show the actual error so the user knows what happened, then return
-        // them to login after a brief pause so they can read the message.
-        const msg = err instanceof Error ? err.message : "Session expired — please sign in again";
-        setError(msg);
-        setTimeout(() => navigate("/admin/login"), 3000);
+        console.error("[TotpSetup] enroll failed:", err);
+        // Redirect to login only on 401 (no pending session).
+        // Any other error stays on this page so the user can see what went wrong.
+        if (err instanceof ApiError && err.status === 401) {
+          navigate("/admin/login");
+        } else {
+          const msg = err instanceof Error ? err.message : "Could not load setup — please try again";
+          setError(msg);
+        }
       });
   }, [navigate]);
 

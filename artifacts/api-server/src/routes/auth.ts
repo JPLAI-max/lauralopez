@@ -119,10 +119,12 @@ getDummyHash().catch(() => {});
 // ---------------------------------------------------------------------------
 const PENDING_COOKIE_MAX_AGE = 10 * 60 * 1000;
 
-// Detect HTTPS context: production flag OR running behind an HTTPS reverse proxy
-// (Replit's preview proxy always sets x-forwarded-proto: https).
+// Detect HTTPS context: production, Replit container, or an explicit HTTPS proxy header.
+// Replit's preview is always behind HTTPS but does NOT forward x-forwarded-proto, so
+// we detect the Replit environment via the REPL_ID variable (always set in Replit containers).
 function isHttpsContext(req: Request): boolean {
   if (process.env.NODE_ENV === "production") return true;
+  if (process.env.REPL_ID) return true;                         // Replit dev environment
   const proto = req.headers["x-forwarded-proto"];
   return proto === "https" || (Array.isArray(proto) && proto.includes("https"));
 }

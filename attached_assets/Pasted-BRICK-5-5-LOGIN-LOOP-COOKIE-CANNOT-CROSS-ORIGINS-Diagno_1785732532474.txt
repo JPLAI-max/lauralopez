@@ -1,0 +1,71 @@
+BRICK 5.5 — LOGIN LOOP: COOKIE CANNOT CROSS ORIGINS
+
+Diagnosis (confirmed by reading the code — do not re-diagnose):
+vite.config.ts has NO server.proxy, so the frontend and API are
+on different origins. /auth/login sets totp_pending with
+sameSite:"lax" and secure:false. Replit dev is HTTPS, and a
+cross-site cookie MUST be SameSite=None; Secure to be stored or
+sent. The browser silently drops it. /auth/totp/enroll then
+returns 401, and TotpSetup.tsx:29 catches every error and
+redirects to /admin/login with no message — producing a silent
+loop.
+
+The TOTP implementation is NOT the bug. Do not modify the TOTP
+verification, enrollment, or crypto logic.
+
+1. ADD THE VITE PROXY — this is the actual fix
+   In artifacts/laura-lopez/vite.config.ts add a proxy to BOTH
+   server and preview:
+
+     proxy: {
+       "/api": {
+         target: process.env.API_PROXY_TARGET,
+         changeOrigin: true,
+         secure: false,
+       },
+     }
+
+   Resolve API_PROXY_TARGET from the environment. Determine the
+   port the api-server artifact actually binds and wire it.
+   Throw a clear startup error if it cannot be resolved — do NOT
+   fall back to a guessed port.
+
+   Once same-origin, sameSite:"lax" is correct and needs no
+   change.
+
+2. STOP SWALLOWING THE ERROR
+   TotpSetup.tsx useEffect currently does .catch(() => navigate(
+   "/admin/login")). Replace with:
+     - Log the error to console.
+     - Redirect to /admin/login ONLY on a 401.
+     - On any other error, render the error message on the page
+       and do not redirect.
+   A blind redirect on every failure is why this took five
+   attempts to find.
+
+3. SURFACE NON-JSON RESPONSES
+   In admin-api.ts, if a response's content-type is not
+   application/json, throw an ApiError with the status and the
+   received content-type. Currently an HTML error page parses as
+   a generic failure with no useful information.
+
+4. LOGIN PAGE MUST SHOW ERRORS
+   Confirm the login page renders any thrown ApiError message
+   visibly. A login attempt must never result in nothing
+   happening on screen.
+
+ACCEPTANCE — paste real evidence for each
+1.  /api/healthz through the FRONTEND origin returns JSON, not
+    HTML.
+2.  Login with a wrong password -> visible "Invalid credentials"
+    on screen.
+3.  Login with the correct password -> reaches TOTP setup and a
+    QR code RENDERS. Screenshot it.
+4.  devtools Application > Cookies shows totp_pending on the app
+    origin after login.
+5.  Enter a code from an authenticator app -> enrollment
+    completes and 10 recovery codes display.
+6.  devtools shows the sid cookie after full login.
+7.  /api/auth/me returns the user object.
+8.  Stop the API server -> login shows a clear error rather than
+    doing nothing.

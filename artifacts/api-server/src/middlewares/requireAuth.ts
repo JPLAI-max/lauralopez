@@ -150,6 +150,7 @@ export function requireRole(role: string) {
 
 function isHttpsContext(req: Request): boolean {
   if (process.env.NODE_ENV === "production") return true;
+  if (process.env.REPL_ID) return true;                         // Replit dev environment
   const proto = req.headers["x-forwarded-proto"];
   return proto === "https" || (Array.isArray(proto) && proto.includes("https"));
 }
