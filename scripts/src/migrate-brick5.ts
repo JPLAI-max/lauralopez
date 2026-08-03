@@ -1,12 +1,17 @@
 /**
- * Brick 5 additive migration runner.
+ * Full migration runner — applies the complete ordered schema.
  *
- * Applies lib/db/drizzle/0001_brick5_campaign_engine.sql using the project's
- * pg Pool connection from @workspace/db.  Uses CREATE TABLE IF NOT EXISTS
- * throughout, so it is safe to run against any state — fresh DB or an
- * already-populated Brick 1–4 database.  Idempotent.
+ * Migration sequence:
+ *   0000_woozy_titania.sql          — Brick 1–4 baseline (IF NOT EXISTS, safe on existing DBs)
+ *   0001_brick5_campaign_engine.sql — Brick 5 additive  (IF NOT EXISTS, safe on existing DBs)
  *
- * Run: scripts/node_modules/.bin/tsx scripts/src/migrate-brick5.ts
+ * Both files use CREATE TABLE IF NOT EXISTS, so this runner is fully
+ * idempotent and safe to apply against:
+ *   • a fresh database        — creates every table in order
+ *   • an existing Brick 1–4 DB — 0000 is a no-op; 0001 creates the 7 new tables
+ *   • an already-migrated DB  — both files are no-ops
+ *
+ * Run: scripts/node_modules/.bin/tsx src/migrate-brick5.ts
  */
 
 import { readFileSync } from "node:fs";
@@ -15,29 +20,30 @@ import { fileURLToPath } from "node:url";
 import { pool } from "@workspace/db";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DRIZZLE_DIR = path.join(__dirname, "../../lib/db/drizzle");
 
-const migrationPath = path.join(
-  __dirname,
-  "../../lib/db/drizzle/0001_brick5_campaign_engine.sql",
-);
+const MIGRATIONS = [
+  "0000_woozy_titania.sql",
+  "0001_brick5_campaign_engine.sql",
+];
 
-const migrationSql = readFileSync(migrationPath, "utf8");
+async function applyFile(client: Awaited<ReturnType<typeof pool.connect>>, filename: string) {
+  const sql = readFileSync(path.join(DRIZZLE_DIR, filename), "utf8");
+  console.log(`  ▸ applying ${filename}…`);
+  await client.query(sql);
+  console.log(`  ✓ ${filename} applied`);
+}
 
 async function run() {
-  console.log("▶ migrate-brick5: applying additive migration…");
-
+  console.log("▶ migrate: applying schema migrations…");
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    // Execute the full migration as a single transaction.
-    // The SQL uses CREATE TABLE IF NOT EXISTS throughout, so duplicate runs
-    // are no-ops.  Drizzle statement-breakpoints are comments only; we can
-    // execute the whole file at once.
-    await client.query(migrationSql);
-
+    for (const filename of MIGRATIONS) {
+      await applyFile(client, filename);
+    }
     await client.query("COMMIT");
-    console.log("✅ migrate-brick5: migration applied successfully.");
+    console.log("✅ All migrations applied successfully.");
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -48,6 +54,6 @@ async function run() {
 }
 
 run().catch((err) => {
-  console.error("❌ migrate-brick5 failed:", err.message ?? err);
+  console.error("❌ Migration failed:", err.message ?? err);
   process.exit(1);
 });

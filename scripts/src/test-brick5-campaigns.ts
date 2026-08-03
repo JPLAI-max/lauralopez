@@ -1,6 +1,6 @@
 /**
- * Brick 5 — Listing Campaign Engine acceptance test.
- * 12 acceptance checks.
+ * Brick 5 — Listing Campaign Engine acceptance + routing test.
+ * 16 checks: 12 functional acceptance + 4 deterministic routing checks.
  * Run: scripts/node_modules/.bin/tsx scripts/src/test-brick5-campaigns.ts
  */
 import { createDecipheriv, scryptSync } from "node:crypto";
@@ -272,6 +272,75 @@ function fail(n: number, msg: string): never { console.error(`  ❌ [${n}/12] ${
     pass(12, "PATCH campaign status → cancelled");
   }
 
-  console.log("\n✅ All 12 acceptance checks passed.\n");
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Deterministic routing checks (R1–R4) — no external AI calls needed.
+  // Uses a fresh campaign on the same session to avoid re-authentication.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const { body: routingCampBody } = await req("POST", "/admin/campaigns", {
+    propertyId, templateId, anchorDate, trigger: "new_listing",
+  });
+  const routingCampId = (routingCampBody as { campaign: { id: string } }).campaign.id;
+  const { body: routingDetailBody } = await req("GET", `/admin/campaigns/${routingCampId}`);
+  const routingTasks = (routingDetailBody as { tasks: { id: string; channel: string; assetType: string | null }[] }).tasks;
+
+  // ── Check 13: manual channel → 422 before any AI call ────────────────────
+  {
+    const manualTask = routingTasks.find((t) => t.channel === "manual");
+    if (!manualTask) fail(13, "No manual task found");
+    else {
+      const { status, body } = await req("POST", `/admin/campaign-tasks/${manualTask.id}/generate`);
+      if (status !== 422) fail(13, `manual channel must return 422, got ${status}: ${JSON.stringify(body)}`);
+      const errMsg = (body as { error: string }).error ?? "";
+      if (!errMsg.includes("manual") && !errMsg.includes("No generator"))
+        fail(13, `manual 422 body should mention 'manual' or 'No generator', got: ${errMsg}`);
+      else pass(13, `manual channel → 422 '${errMsg}' (no AI call)`);
+    }
+  }
+
+  // ── Check 14: unknown task ID → 404 (pure routing, no AI) ────────────────
+  {
+    const { status } = await req("POST", "/admin/campaign-tasks/00000000-0000-0000-0000-000000000000/generate");
+    if (status !== 404) fail(14, `unknown task → expected 404, got ${status}`);
+    else pass(14, "unknown task → 404 without AI call");
+  }
+
+  // ── Check 15: image task without hero media → 422 or 503 (pre-AI) ────────
+  {
+    const imageTask = routingTasks.find((t) => t.assetType === "image_1x1" || t.assetType === "image_9x16");
+    if (!imageTask) fail(15, "No image task found");
+    else {
+      const { status, body } = await req("POST", `/admin/campaign-tasks/${imageTask.id}/generate`);
+      const errMsg = (body as { error: string }).error ?? "";
+      const ok = (status === 422 && errMsg.toLowerCase().includes("hero")) ||
+                 (status === 503 && errMsg.toLowerCase().includes("storage"));
+      if (!ok) fail(15, `image without hero/R2 → expected 422 (no hero) or 503 (no R2), got ${status}: ${errMsg}`);
+      else pass(15, `image without hero/R2 → ${status} before AI call`);
+    }
+  }
+
+  // ── Check 16: print_pdf routing — assetType lands on print_pdf branch ─────
+  {
+    const pdfTask = routingTasks.find((t) => t.assetType === "print_pdf");
+    if (!pdfTask) fail(16, "No print_pdf task found");
+    else {
+      const { status, body } = await req("POST", `/admin/campaign-tasks/${pdfTask.id}/generate`);
+      if (status === 201) {
+        const asset = (body as { asset: { assetType: string; textContent: string | null } }).asset;
+        if (asset.assetType !== "print_pdf")
+          fail(16, `print_pdf routed to wrong branch: assetType=${asset.assetType}`);
+        else if (!asset.textContent)
+          fail(16, "print_pdf returned no textContent — copy-first pipeline did not run");
+        else
+          pass(16, `print_pdf → 201, assetType=print_pdf, textContent populated (copy-first pipeline confirmed)`);
+      } else {
+        fail(16, `print_pdf generate → ${status}: ${JSON.stringify(body)}`);
+      }
+    }
+  }
+
+  // Cleanup routing test campaign
+  await req("PATCH", `/admin/campaigns/${routingCampId}`, { status: "cancelled" });
+
+  console.log("\n✅ All 16 checks passed (12 acceptance + 4 routing).\n");
   process.exit(0);
 })().catch((e) => { console.error("FATAL:", e); process.exit(1); });
