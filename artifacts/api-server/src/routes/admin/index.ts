@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireAuth, requireTotpEnrolled } from "../../middlewares/requireAuth";
 import inquiriesAdminRouter from "./inquiries";
+import transactionsAdminRouter from "./transactions";
 
 const router: IRouter = Router();
 
@@ -9,5 +10,6 @@ const router: IRouter = Router();
 router.use(requireAuth, requireTotpEnrolled);
 
 router.use("/inquiries", inquiriesAdminRouter);
+router.use("/", transactionsAdminRouter);
 
 export default router;

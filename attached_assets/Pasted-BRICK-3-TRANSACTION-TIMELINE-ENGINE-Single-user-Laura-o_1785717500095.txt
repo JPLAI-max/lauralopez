@@ -1,0 +1,252 @@
+BRICK 3 — TRANSACTION TIMELINE ENGINE
+
+Single-user (Laura only) but schema-ready for multi-agent later.
+Do NOT build sharing, invitations, or a permissions matrix.
+
+────────────────────────────────────────
+0. TOTP RECOVERY CODES (prerequisite)
+────────────────────────────────────────
+Add table recovery_codes:
+  id, userId -> users.id cascade, codeHash (argon2id), usedAt
+  (timestamptz nullable), createdAt
+
+On successful TOTP enrollment, generate 10 codes (8 chars,
+Crockford base32, no ambiguous chars). Show them ONCE, plaintext,
+with a copy button and a "I have saved these" confirm. Store only
+hashes.
+
+POST /auth/verify-recovery { code } — accepted in place of a TOTP
+code at the verify step. On use: mark usedAt, log a
+recovery_used auth event, issue the session. A code is
+single-use. Same rate limiting as TOTP.
+
+Settings page shows remaining unused count and a regenerate
+action (invalidates all prior codes).
+
+────────────────────────────────────────
+1. SCHEMA — lib/db/src/schema/transactions.ts
+────────────────────────────────────────
+EVERY table below gets, from day one:
+  ownerId   uuid notNull -> users.id
+  officeId  uuid nullable        // null today; multi-tenant later
+Index both. Every query filters on ownerId even though there is
+one user. Do not skip this.
+
+transactions
+  id, ownerId, officeId
+  propertyAddress   text notNull
+  side              text notNull        // buy | sell
+  clientName        text notNull
+  clientEmail       text nullable
+  clientPhone       text nullable
+  status            text notNull default 'active'
+                    // active | closed | cancelled | pending
+  acceptanceDate    date nullable
+  closeOfEscrowDate date nullable
+  purchasePrice     numeric(14,2) nullable
+  escrowCompany     text nullable
+  escrowOfficer     text nullable
+  escrowOfficerEmail text nullable
+  lender            text nullable
+  coopAgent         text nullable
+  coopBrokerage     text nullable
+  notes             text nullable
+  icsToken          text notNull unique   // 32-byte random hex
+  createdAt, updatedAt, closedAt
+
+milestone_templates
+  id, ownerId, officeId, name, side, isDefault, createdAt
+
+milestone_template_items
+  id, templateId cascade
+  label             text notNull
+  offsetDays        integer notNull
+  anchor            text notNull   // acceptance | coe
+  direction         text notNull   // after | before
+  dayType           text notNull   // calendar | business
+  category          text notNull   // contingency | disclosure |
+                                   // inspection | financing | admin
+  requiresWrittenRemoval boolean notNull default false
+  sortOrder         integer notNull
+
+transaction_milestones          -- live instances
+  id, transactionId cascade, ownerId
+  label, category
+  computedDate      date nullable
+  overrideDate      date nullable    // manual override
+  effectiveDate     -- NOT stored; derived as override ?? computed
+  status            text notNull default 'pending'
+                    // pending | complete | waived
+  requiresWrittenRemoval boolean notNull default false
+  removalDeliveredAt timestamptz nullable
+  completedAt, completedBy, notes, sortOrder
+
+transaction_documents
+  id, transactionId cascade, ownerId, milestoneId nullable
+  filename, storageKey, mimeType, sizeBytes, uploadedAt
+
+transaction_events            -- APPEND ONLY, never update/delete
+  id, transactionId cascade, ownerId
+  actor       text notNull
+  action      text notNull
+  payload     jsonb notNull
+  createdAt   timestamptz notNull defaultNow
+
+  Log: transaction_created, dates_changed, milestone_completed,
+  milestone_waived, date_overridden, removal_delivered,
+  status_changed, document_uploaded.
+  This table is the dataset for the wider product — capture
+  before/after values in payload, not just the new value.
+
+────────────────────────────────────────
+2. DATE ENGINE — api-server/src/lib/dates.ts
+────────────────────────────────────────
+computeMilestoneDate({ anchorDate, offsetDays, direction, dayType })
+
+  calendar: add or subtract offsetDays directly.
+  business: skip Saturdays, Sundays, and dates in a holiday list.
+            Holiday list is a module constant array of ISO dates
+            covering the next 2 years of US federal holidays —
+            include it, do not fetch it.
+
+  If the anchor date is null, return null. Never guess an anchor.
+
+Recompute rule: when acceptanceDate or closeOfEscrowDate changes,
+recompute computedDate for every milestone on that transaction.
+NEVER touch overrideDate on recompute — a manual override always
+wins and survives anchor changes. Write a dates_changed event
+with the full before/after milestone set.
+
+Unit test the engine directly: weekend rollover, month boundary,
+year boundary, holiday adjacent to a weekend, negative offsets
+(before COE), null anchors.
+
+────────────────────────────────────────
+3. STATUS SEMANTICS — read carefully
+────────────────────────────────────────
+A deadline passing does NOT complete or remove a milestone.
+"Overdue" is DERIVED, never stored:
+
+  overdue = status === 'pending' AND effectiveDate < today
+
+For milestones with requiresWrittenRemoval, "complete" requires
+removalDeliveredAt to be set. A pending milestone past its date
+with requiresWrittenRemoval true is the loudest state in the UI —
+that is the gap where deals go wrong.
+
+Derive status colours client-side from effectiveDate and today.
+Do not run a cron that mutates rows to 'overdue'.
+
+────────────────────────────────────────
+4. DEFAULT TEMPLATES — scripts/src/seed-templates.ts
+────────────────────────────────────────
+Seed two templates, "Standard Purchase (Buy)" and "Standard Sale
+(Sell)", with common milestones: earnest money deposit,
+disclosure delivery, inspection contingency, appraisal
+contingency, loan contingency, contingency removal, final
+walkthrough (before COE), close of escrow.
+
+Every seeded offset is a STARTING GUESS, not authority. The
+transaction creation UI must display, above the milestone list:
+
+  "Default periods only. Confirm every date against the executed
+   contract — all periods are negotiable and frequently modified."
+
+Make that text a component constant so it cannot be lost in a
+redesign.
+
+────────────────────────────────────────
+5. ENDPOINTS — /api/admin/transactions
+────────────────────────────────────────
+  GET    /                      list, filter by status, sort
+  POST   /                      create; applies template, computes
+                                all milestones in one transaction
+  GET    /:id                   detail with milestones + events
+  PATCH  /:id                   update fields; triggers recompute
+                                if either anchor date changed
+  DELETE /:id                   soft delete only (status cancelled)
+
+  PATCH  /:id/milestones/:mid   status, overrideDate,
+                                removalDeliveredAt, notes
+  POST   /:id/milestones        add ad-hoc milestone
+  DELETE /:id/milestones/:mid
+
+  GET    /:id/events            audit trail, newest first
+
+All under requireAuth. All filter by ownerId — never trust the
+id alone.
+
+────────────────────────────────────────
+6. ICS FEED — public route, token-authenticated
+────────────────────────────────────────
+GET /api/calendar/:icsToken.ics    (NOT under /api/admin)
+
+  - Look up transaction by icsToken. Unknown token -> 404, and do
+    NOT reveal whether it ever existed.
+  - Emit VEVENTs: one all-day event per pending or complete
+    milestone, using effectiveDate. UID stable per milestone id so
+    updates replace rather than duplicate.
+  - SUMMARY: "{label} — {propertyAddress}"
+  - Include a VALARM 1 day prior on pending items.
+  - Cache-Control: no-cache. Content-Type: text/calendar.
+  - Rate limit by token: 60 req/hour.
+
+Build the ICS string manually or with a small library — do not
+pull in a heavy calendar dependency.
+
+Detail page shows the subscribe URL with a copy button and a one
+line note that anyone with the link can see the dates.
+
+────────────────────────────────────────
+7. UI — pages/admin/Transactions.tsx (replace stub)
+────────────────────────────────────────
+List: address, client, side, status, COE date, next upcoming
+milestone, count of overdue. Sort by next milestone ascending.
+Overdue count badge in red.
+
+Detail: header with editable core fields, then the milestone
+timeline. Each row shows label, effective date, an override
+indicator when overrideDate is set, category chip, and status
+control. Overdue rows red. Overdue + requiresWrittenRemoval gets
+a distinct stronger treatment with an explicit
+"Written removal not received" label.
+
+Creation flow: address, side, client, template pick, acceptance
+date, COE date -> preview the full computed milestone list BEFORE
+saving, with every date editable inline. Nothing is written until
+confirm.
+
+Dense working-tool layout, same palette. Usable at 375px —
+timeline becomes stacked cards below md, not a squeezed table.
+
+────────────────────────────────────────
+8. NOT THE COMPLIANCE FILE
+────────────────────────────────────────
+Footer text on every transaction page, as a component constant:
+
+  "Operational timeline tracking. Executed contracts and
+   disclosures are retained separately by the brokerage."
+
+────────────────────────────────────────
+ACCEPTANCE
+────────────────────────────────────────
+1.  typecheck clean.
+2.  Date engine unit tests pass, including holiday+weekend
+    adjacency and negative offsets from COE.
+3.  Create a transaction with acceptance date on a Thursday and a
+    3-business-day inspection period -> lands on Tuesday.
+4.  Change acceptanceDate -> all non-overridden milestones
+    recompute; an overridden milestone does NOT move.
+5.  A dates_changed event records before AND after values.
+6.  Milestone past date, status pending -> renders overdue
+    without any stored status change.
+7.  requiresWrittenRemoval milestone past date without
+    removalDeliveredAt -> distinct stronger warning state.
+8.  ICS URL loads in Google Calendar and shows every milestone.
+9.  Bad ICS token -> 404 with no information leak.
+10. Every transaction row created carries ownerId; querying with
+    a different ownerId returns nothing.
+11. Recovery code logs in successfully and cannot be reused.
+12. Transactions page usable at 375px.
+
+Report each with evidence.

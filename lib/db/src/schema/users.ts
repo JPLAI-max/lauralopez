@@ -66,3 +66,22 @@ export const authEventsTable = pgTable("auth_events", {
 });
 
 export type AuthEvent = typeof authEventsTable.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// recovery_codes — single-use TOTP account recovery
+// ---------------------------------------------------------------------------
+export const recoveryCodesTable = pgTable(
+  "recovery_codes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull(), // argon2id of the plaintext code
+    usedAt: timestamp("used_at", { withTimezone: true }), // null = not yet used
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("recovery_codes_user_id_idx").on(t.userId)],
+);
+
+export type RecoveryCode = typeof recoveryCodesTable.$inferSelect;
