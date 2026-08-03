@@ -691,7 +691,7 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
         }
 
         const sourceBuffer = await getObjectBuffer(photoByAspect.storageKey);
-        const city         = extractCity(property.address);
+        const city         = extractCity(property.address, property.neighborhood);
 
         // Headline derived from campaign trigger (agent can override via templateId later)
         const TRIGGER_HEADLINE: Record<string, string> = {

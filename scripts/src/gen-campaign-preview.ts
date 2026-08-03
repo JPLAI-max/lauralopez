@@ -20,6 +20,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { db, marketingTemplatesTable, propertiesTable } from "@workspace/db";
 import { and, eq, desc } from "drizzle-orm";
 import {
@@ -33,7 +34,10 @@ import {
 } from "../../artifacts/api-server/src/lib/campaign-copy-gen";
 import { generateCampaignPdf } from "../../artifacts/api-server/src/lib/campaign-pdf-gen";
 
-const OUT_DIR = path.resolve("docs/campaign-previews");
+// Resolve against repo root regardless of cwd when the script is run
+const _scriptDir = path.dirname(fileURLToPath(import.meta.url)); // scripts/src
+const REPO_ROOT  = path.resolve(_scriptDir, "../..");             // workspace root
+const OUT_DIR    = path.join(REPO_ROOT, "docs/campaign-previews");
 
 // ---------------------------------------------------------------------------
 // Dummy agent / DRE constants (would come from settings in the live path)
@@ -98,15 +102,19 @@ async function main() {
 
   // ── Load property for address / facts ────────────────────────────────────
   const propRows = await db
-    .select({ address: propertiesTable.address, listPrice: propertiesTable.listPrice })
+    .select({
+      address:      propertiesTable.address,
+      listPrice:    propertiesTable.listPrice,
+      neighborhood: propertiesTable.neighborhood,
+    })
     .from(propertiesTable)
     .limit(1);
   const prop       = propRows[0];
-  const fullAddr   = prop?.address ?? "412 N Mapleton Dr, Beverly Hills, CA 90210";
-  const listPrice  = prop?.listPrice ?? "8750000";
+  const fullAddr   = prop?.address      ?? "412 N Mapleton Dr, Beverly Hills, CA 90210";
+  const listPrice  = prop?.listPrice    ?? "8750000";
   const priceStr   = "$" + Math.round(parseFloat(listPrice)).toLocaleString("en-US");
   const street     = extractStreet(fullAddr);
-  const city       = extractCity(fullAddr);
+  const city       = extractCity(fullAddr, prop?.neighborhood);
   console.log(`  property: ${fullAddr} · ${priceStr}\n`);
 
   // ── Dummy photo — 1080×1920 gradient (real photo requires R2) ────────────

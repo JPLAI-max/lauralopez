@@ -473,12 +473,50 @@ export function extractStreet(address: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// City extraction — naively splits "123 Main St, Beverly Hills, CA 90210"
+// City extraction
+//
+// Priority:
+//   1. neighborhood field when present and non-empty
+//   2. segment after first comma in address, with trailing state/ZIP stripped
+//   3. throws MISSING_CITY if neither yields a clean value
+//
+// Examples:
+//   "412 N Mapleton Dr, Beverly Hills, CA 90210"  → "Beverly Hills"
+//   "1 Campaign Test Rd, Beverly Hills CA 90210"  → "Beverly Hills"
+//   "1 Main St, Beverly Hills"                     → "Beverly Hills"
 // ---------------------------------------------------------------------------
-export function extractCity(address: string): string {
-  const parts = address.split(",").map((p) => p.trim());
-  // City is typically the second-to-last part before state+zip
-  if (parts.length >= 3) return parts[parts.length - 2] ?? parts[0] ?? "";
-  if (parts.length === 2) return parts[1] ?? parts[0] ?? "";
-  return parts[0] ?? "";
+export function extractCity(address: string, neighborhood?: string | null): string {
+  // 1. Explicit neighborhood field takes precedence
+  const nb = neighborhood?.trim();
+  if (nb) return nb;
+
+  // 2. Parse from address
+  const commaIdx = address.indexOf(",");
+  if (commaIdx < 0) {
+    throw Object.assign(
+      new Error("Cannot generate — missing city: address has no city segment"),
+      { code: "MISSING_CITY" },
+    );
+  }
+
+  // Take the segment immediately after the first comma; stop at the next comma
+  const afterStreet = address.slice(commaIdx + 1);
+  const nextComma   = afterStreet.indexOf(",");
+  const citySegment = (nextComma >= 0 ? afterStreet.slice(0, nextComma) : afterStreet).trim();
+
+  // Strip trailing state abbreviation (two uppercase letters) and/or ZIP code
+  const cleaned = citySegment
+    .replace(/\s+[A-Z]{2}\s+\d{5}(-\d{4})?$/, "") // "Beverly Hills CA 90210" → "Beverly Hills"
+    .replace(/\s+[A-Z]{2}$/, "")                    // "Beverly Hills CA"       → "Beverly Hills"
+    .replace(/\s+\d{5}(-\d{4})?$/, "")              // "Beverly Hills 90210"    → "Beverly Hills"
+    .trim();
+
+  if (!cleaned) {
+    throw Object.assign(
+      new Error("Cannot generate — missing city: no clean city value derived from address"),
+      { code: "MISSING_CITY" },
+    );
+  }
+
+  return cleaned;
 }
