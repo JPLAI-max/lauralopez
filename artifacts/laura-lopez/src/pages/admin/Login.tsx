@@ -70,11 +70,11 @@ export default function AdminLogin() {
           <p className="text-xs text-white/60 uppercase tracking-widest mt-1">Admin Access</p>
         </div>
 
-        <div className="bg-black/40 backdrop-blur-sm border border-white/20 p-6">
+        <div className="bg-black/50 backdrop-blur-sm border border-white/20 p-6">
           {step === "credentials" ? (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-xs uppercase tracking-wider text-foreground/60 mb-1">
+                <label className="block text-xs uppercase tracking-wider text-white/70 mb-1">
                   Email
                 </label>
                 <input
@@ -83,11 +83,11 @@ export default function AdminLogin() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full border border-white/30 bg-white/10 text-white placeholder-white/40 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/60"
                 />
               </div>
               <div>
-                <label className="block text-xs uppercase tracking-wider text-foreground/60 mb-1">
+                <label className="block text-xs uppercase tracking-wider text-white/70 mb-1">
                   Password
                 </label>
                 <input
@@ -96,10 +96,10 @@ export default function AdminLogin() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full border border-white/30 bg-white/10 text-white placeholder-white/40 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/60"
                 />
               </div>
-              {error && <p className="text-xs text-destructive">{error}</p>}
+              {error && <p className="text-xs text-red-300">{error}</p>}
               <button
                 type="submit"
                 disabled={loading}
@@ -110,11 +110,11 @@ export default function AdminLogin() {
             </form>
           ) : (
             <form onSubmit={handleTotp} className="space-y-4">
-              <p className="text-sm text-foreground/70">
+              <p className="text-sm text-white/70">
                 Enter the 6-digit code from your authenticator app.
               </p>
               <div>
-                <label className="block text-xs uppercase tracking-wider text-foreground/60 mb-1">
+                <label className="block text-xs uppercase tracking-wider text-white/70 mb-1">
                   Authenticator Code
                 </label>
                 <input
@@ -126,11 +126,11 @@ export default function AdminLogin() {
                   required
                   value={totpCode}
                   onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
-                  className="w-full border border-border bg-background px-3 py-2 text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full border border-white/30 bg-white/10 text-white px-3 py-2 text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:ring-1 focus:ring-white/60"
                   placeholder="000000"
                 />
               </div>
-              {error && <p className="text-xs text-destructive">{error}</p>}
+              {error && <p className="text-xs text-red-300">{error}</p>}
               <button
                 type="submit"
                 disabled={loading || totpCode.length < 6}
@@ -141,7 +141,7 @@ export default function AdminLogin() {
               <button
                 type="button"
                 onClick={() => { setStep("credentials"); setError(""); setTotpCode(""); }}
-                className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+                className="w-full text-xs text-white/50 hover:text-white/80 transition-colors py-1"
               >
                 ← Back
               </button>

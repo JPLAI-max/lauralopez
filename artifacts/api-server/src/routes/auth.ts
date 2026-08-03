@@ -118,12 +118,31 @@ getDummyHash().catch(() => {});
 // Pending cookie helpers
 // ---------------------------------------------------------------------------
 const PENDING_COOKIE_MAX_AGE = 10 * 60 * 1000;
-function setPendingCookie(res: Response, userId: string): void {
-  const isProduction = process.env.NODE_ENV === "production";
-  res.cookie("totp_pending", userId, { httpOnly: true, sameSite: "lax", secure: isProduction, maxAge: PENDING_COOKIE_MAX_AGE, signed: true });
+
+// Detect HTTPS context: production flag OR running behind an HTTPS reverse proxy
+// (Replit's preview proxy always sets x-forwarded-proto: https).
+function isHttpsContext(req: Request): boolean {
+  if (process.env.NODE_ENV === "production") return true;
+  const proto = req.headers["x-forwarded-proto"];
+  return proto === "https" || (Array.isArray(proto) && proto.includes("https"));
 }
-function clearPendingCookie(res: Response): void {
-  res.clearCookie("totp_pending", { httpOnly: true, sameSite: "lax", signed: true });
+
+function setPendingCookie(res: Response, req: Request, userId: string): void {
+  const https = isHttpsContext(req);
+  res.cookie("totp_pending", userId, {
+    httpOnly:  true,
+    // SameSite=None + Secure lets the cookie work in Replit's cross-origin preview
+    // iframe.  Fall back to Lax for plain HTTP local dev.
+    sameSite:  https ? "none" : "lax",
+    secure:    https,
+    maxAge:    PENDING_COOKIE_MAX_AGE,
+    signed:    true,
+  });
+}
+
+function clearPendingCookie(res: Response, req: Request): void {
+  const https = isHttpsContext(req);
+  res.clearCookie("totp_pending", { httpOnly: true, sameSite: https ? "none" : "lax", secure: https, signed: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -182,7 +201,7 @@ router.post("/auth/login", async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  setPendingCookie(res, user.id);
+  setPendingCookie(res, req, user.id);
   await logAuthEvent({ userId: user.id, email, action: "password_ok", success: true, ipHash, userAgent: ua });
   res.json({ requiresTotp: user.totpEnabled, requiresTotpSetup: !user.totpEnabled });
 });
@@ -222,8 +241,8 @@ router.post("/auth/verify-totp", async (req: Request, res: Response): Promise<vo
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const [session] = await db.insert(sessionsTable).values({ userId: user.id, expiresAt, userAgent: ua, ipHash }).returning();
   await db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id));
-  clearPendingCookie(res);
-  setSessionCookie(res, session!.id);
+  clearPendingCookie(res, req);
+  setSessionCookie(res, req, session!.id);
   await logAuthEvent({ userId: user.id, email: user.email, action: "login", success: true, ipHash, userAgent: ua });
   res.json({ ok: true });
 });
@@ -276,8 +295,8 @@ router.post("/auth/verify-recovery", async (req: Request, res: Response): Promis
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const [session] = await db.insert(sessionsTable).values({ userId: user.id, expiresAt, userAgent: ua, ipHash }).returning();
   await db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id));
-  clearPendingCookie(res);
-  setSessionCookie(res, session!.id);
+  clearPendingCookie(res, req);
+  setSessionCookie(res, req, session!.id);
 
   await logAuthEvent({ userId: user.id, email: user.email, action: "recovery_used", success: true, ipHash, userAgent: ua });
   await logAuthEvent({ userId: user.id, email: user.email, action: "login", success: true, ipHash, userAgent: ua });
@@ -293,7 +312,7 @@ router.post("/auth/logout", requireAuth, async (req: Request, res: Response): Pr
   if (req.user) {
     await logAuthEvent({ userId: req.user.id, email: req.user.email, action: "logout", success: true, ipHash: hashIpForAuth(getClientIp(req)), userAgent: req.headers["user-agent"] ?? null });
   }
-  clearSessionCookie(res);
+  clearSessionCookie(res, req);
   res.json({ ok: true });
 });
 
@@ -362,8 +381,8 @@ router.post("/auth/totp/confirm", async (req: Request, res: Response): Promise<v
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const [session] = await db.insert(sessionsTable).values({ userId: user.id, expiresAt, userAgent: ua, ipHash }).returning();
   await db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id));
-  clearPendingCookie(res);
-  setSessionCookie(res, session!.id);
+  clearPendingCookie(res, req);
+  setSessionCookie(res, req, session!.id);
   res.json({ ok: true, recoveryCodes });
 });
 

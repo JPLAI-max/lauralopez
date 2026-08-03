@@ -26,8 +26,12 @@ export default function TotpSetup() {
         setSecret(r.secret);
         setStep("confirm");
       })
-      .catch(() => {
-        navigate("/admin/login");
+      .catch((err: unknown) => {
+        // Show the actual error so the user knows what happened, then return
+        // them to login after a brief pause so they can read the message.
+        const msg = err instanceof Error ? err.message : "Session expired — please sign in again";
+        setError(msg);
+        setTimeout(() => navigate("/admin/login"), 3000);
       });
   }, [navigate]);
 

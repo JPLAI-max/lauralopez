@@ -50,7 +50,7 @@ export async function requireAuth(
       .limit(1);
 
     if (rows.length === 0) {
-      clearSessionCookie(res);
+      clearSessionCookie(res, req);
       res.status(401).json({ error: "Session not found" });
       return;
     }
@@ -72,14 +72,14 @@ export async function requireAuth(
     } catch (err) {
       logger.warn({ err }, "requireAuth: failed to delete expired session");
     }
-    clearSessionCookie(res);
+    clearSessionCookie(res, req);
     res.status(401).json({ error: "Session expired" });
     return;
   }
 
   // Disabled user
   if (user.disabledAt) {
-    clearSessionCookie(res);
+    clearSessionCookie(res, req);
     res.status(403).json({ error: "Account disabled" });
     return;
   }
@@ -93,7 +93,7 @@ export async function requireAuth(
         .update(sessionsTable)
         .set({ expiresAt: newExpiry })
         .where(eq(sessionsTable.id, session.id));
-      setSessionCookie(res, session.id);
+      setSessionCookie(res, req, session.id);
     } catch (err) {
       logger.warn({ err }, "requireAuth: failed to extend session");
     }
@@ -148,19 +148,26 @@ export function requireRole(role: string) {
   };
 }
 
-export function setSessionCookie(res: Response, sessionId: string): void {
-  const isProduction = process.env.NODE_ENV === "production";
+function isHttpsContext(req: Request): boolean {
+  if (process.env.NODE_ENV === "production") return true;
+  const proto = req.headers["x-forwarded-proto"];
+  return proto === "https" || (Array.isArray(proto) && proto.includes("https"));
+}
+
+export function setSessionCookie(res: Response, req: Request, sessionId: string): void {
+  const https = isHttpsContext(req);
   res.cookie("sid", sessionId, {
     httpOnly: true,
-    sameSite: "lax",
-    secure: isProduction,
-    maxAge: SESSION_DURATION_MS,
-    signed: true,
+    sameSite: https ? "none" : "lax",
+    secure:   https,
+    maxAge:   SESSION_DURATION_MS,
+    signed:   true,
   });
 }
 
-export function clearSessionCookie(res: Response): void {
-  res.clearCookie("sid", { httpOnly: true, sameSite: "lax", signed: true });
+export function clearSessionCookie(res: Response, req: Request): void {
+  const https = isHttpsContext(req);
+  res.clearCookie("sid", { httpOnly: true, sameSite: https ? "none" : "lax", secure: https, signed: true });
 }
 
 export function hashIpForAuth(ip: string): string {
