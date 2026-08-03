@@ -3,8 +3,8 @@
  * Served under /api/content
  */
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, articlesTable, propertiesTable, imageSlotsTable, mediaTable } from "@workspace/db";
-import { eq, and, desc, asc, lte } from "drizzle-orm";
+import { db, articlesTable, propertiesTable, imageSlotsTable, mediaTable, settingsTable } from "@workspace/db";
+import { eq, and, desc, asc, inArray } from "drizzle-orm";
 import { isConfigured, publicUrl } from "../lib/storage";
 
 const router: IRouter = Router();
@@ -69,6 +69,35 @@ async function attachMediaToProperty(p: typeof propertiesTable.$inferSelect) {
   }
   return { ...p, heroUrl, heroSrcset, heroAlt, heroFocalX, heroFocalY };
 }
+
+// ---------------------------------------------------------------------------
+// GET /api/content/site-settings  — public subset of settings, cached 60 s
+// Keys exposed: dre_license_number, brokerage_name, brokerage_dre_number,
+//               agent_name, contact_email, contact_phone, business_address
+// ---------------------------------------------------------------------------
+const PUBLIC_SETTING_KEYS = [
+  "dre_license_number",
+  "brokerage_name",
+  "brokerage_dre_number",
+  "agent_name",
+  "contact_email",
+  "contact_phone",
+  "business_address",
+] as const;
+
+router.get("/site-settings", async (_req: Request, res: Response) => {
+  const rows = await db
+    .select({ key: settingsTable.key, value: settingsTable.value })
+    .from(settingsTable)
+    .where(inArray(settingsTable.key, [...PUBLIC_SETTING_KEYS]));
+
+  const settings: Record<string, string> = {};
+  for (const k of PUBLIC_SETTING_KEYS) settings[k] = "";
+  for (const r of rows) settings[r.key] = r.value;
+
+  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+  res.json({ settings });
+});
 
 // ---------------------------------------------------------------------------
 // GET /api/content/articles  — published only, paginated

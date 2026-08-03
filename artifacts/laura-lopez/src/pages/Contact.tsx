@@ -1,5 +1,6 @@
 import { motion, type Variants } from "framer-motion";
 import ContactForm from "@/components/ContactForm";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 const fadeUpVariant: Variants = {
   hidden: { opacity: 0, y: 30 },
@@ -7,8 +8,10 @@ const fadeUpVariant: Variants = {
 };
 
 export default function Contact() {
+  const s = useSiteSettings();
+
   return (
-    <div className="w-full  pb-24 min-h-screen bg-card">
+    <div className="w-full pb-24 min-h-screen bg-card">
       <div className="container mx-auto px-6">
         <motion.div initial="hidden" animate="visible" variants={fadeUpVariant} className="max-w-6xl mx-auto flex flex-col lg:flex-row gap-16 lg:gap-24">
           
@@ -26,15 +29,20 @@ export default function Contact() {
             </div>
 
             <div className="space-y-8 border-t border-border pt-8">
-              <div>
-                <h4 className="font-sans uppercase tracking-widest text-xs text-secondary mb-2">Direct Contact</h4>
-                <p className="font-serif text-lg">inquiries@lauralopez-advisory.com</p>
-                <p className="font-serif text-lg">+1 (310) 555-0199</p>
-              </div>
+              {(s.contact_email || s.contact_phone) && (
+                <div>
+                  <h4 className="font-sans uppercase tracking-widest text-xs text-secondary mb-2">Direct Contact</h4>
+                  {s.contact_email && <p className="font-serif text-lg">{s.contact_email}</p>}
+                  {s.contact_phone && <p className="font-serif text-lg">{s.contact_phone}</p>}
+                </div>
+              )}
               
               <div>
                 <h4 className="font-sans uppercase tracking-widest text-xs text-secondary mb-2">Office</h4>
-                <p className="font-serif text-lg">Beverly Hills Estates<br />Beverly Hills, CA 90210</p>
+                <p className="font-serif text-lg">
+                  {s.brokerage_name || "Beverly Hills Estates"}<br />
+                  {s.business_address || "Beverly Hills, CA 90210"}
+                </p>
               </div>
 
               <div className="p-6 bg-background border border-border">

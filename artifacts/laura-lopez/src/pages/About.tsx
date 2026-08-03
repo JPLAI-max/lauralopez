@@ -1,6 +1,7 @@
 import { motion, type Variants } from "framer-motion";
 import { Link } from "wouter";
 import lauraPortrait from "@assets/IMG_0163_1781123890306.jpeg";
+import { useSiteSettings } from "@/hooks/useSiteSettings";
 
 const fadeUpVariant: Variants = {
   hidden: { opacity: 0, y: 30 },
@@ -8,6 +9,7 @@ const fadeUpVariant: Variants = {
 };
 
 export default function About() {
+  const s = useSiteSettings();
   return (
     <div className="w-full  pb-24">
       <div className="container mx-auto px-6">
@@ -16,7 +18,17 @@ export default function About() {
           <div className="flex flex-col lg:flex-row gap-16 lg:gap-24 mb-32">
             <div className="w-full lg:w-1/2 order-2 lg:order-1">
               <h1 className="font-serif text-[clamp(2.25rem,6vw,3.75rem)] text-primary mb-8">Laura Lopez</h1>
-              <h2 className="font-sans uppercase tracking-widest text-sm text-secondary mb-12 pb-6 border-b border-border">Director, Beverly Hills Estates</h2>
+              <h2 className="font-sans uppercase tracking-widest text-sm text-secondary mb-2">Director, Beverly Hills Estates</h2>
+              {(s.agent_name || s.dre_license_number) && (
+                <p className="font-sans text-xs text-muted-foreground tracking-wider mb-12 pb-6 border-b border-border">
+                  {s.agent_name && s.dre_license_number
+                    ? `${s.agent_name}, DRE #${s.dre_license_number}`
+                    : s.agent_name || (s.dre_license_number ? `DRE #${s.dre_license_number}` : "")}
+                </p>
+              )}
+              {!s.agent_name && !s.dre_license_number && (
+                <div className="mb-12 pb-6 border-b border-border" />
+              )}
               
               <div className="font-serif text-lg leading-relaxed text-foreground/80 space-y-6">
                 <p>

@@ -1,0 +1,64 @@
+BRICK 9 — DRE COMPLIANCE + REAL CONTACT INFO
+
+Hard gate before broker review. The public site currently
+carries NO license disclosure anywhere, and shows placeholder
+contact details.
+
+1. SETTINGS AS SOURCE OF TRUTH
+   These already exist for campaign assets. Expose them to the
+   public site via a GET /api/content/site-settings endpoint
+   (public, no auth, cached):
+     dre_license_number
+     brokerage_name
+     brokerage_dre_number
+     agent_name
+     contact_email
+     contact_phone
+     business_address
+
+   Never hardcode any of these in a component.
+
+2. FOOTER DISCLOSURE — every page
+   Add a compliance block to Footer.tsx:
+     {agent_name} · DRE #{dre_license_number}
+     {brokerage_name} · DRE #{brokerage_dre_number}
+     {business_address}
+
+   Small, muted, but legible — not hidden. It must appear on
+   every page including the article detail and 404.
+
+   If dre_license_number or brokerage_name is blank, render a
+   visible build-time warning in development and log an error in
+   production. A missing license number must never fail silently.
+
+3. REPLACE PLACEHOLDER CONTACT INFO
+   Footer.tsx lines 28-29 and Contact.tsx lines 31-32 currently
+   show inquiries@lauralopez-advisory.com and
+   +1 (310) 555-0199. Replace both with the settings values.
+   Render nothing rather than a placeholder if a value is blank.
+
+4. ABOUT PAGE
+   Add the license line to Laura's bio block as well —
+   "{agent_name}, DRE #{number}" beneath her title.
+
+5. LISTING ATTRIBUTION
+   Any property card or detail where isLauraListing is false
+   must display "Listed by {listingBrokerage}". Verify this
+   renders on Top Picks, Listings, and Sold. It was specced in
+   Brick 4 — confirm it actually made it into all three.
+
+6. PRIVACY POLICY
+   Add /privacy with a basic policy: what the inquiry form
+   collects, that email is opt-in only, how to unsubscribe, and
+   the business address. Link it from the footer.
+
+ACCEPTANCE
+1. License block renders on every public page including
+   /intelligence/{slug} and 404.
+2. No 555 number or lauralopez-advisory.com anywhere in the
+   built output. Grep and report.
+3. Blank dre_license_number logs an error rather than rendering
+   an empty line.
+4. A property with isLauraListing false shows its listing
+   brokerage on all three pages.
+5. /privacy renders and is linked from the footer.

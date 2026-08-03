@@ -2,12 +2,14 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SiteSettingsProvider } from "@/hooks/useSiteSettings";
 import NotFound from "@/pages/not-found";
 import Layout from "@/components/layout/Layout";
 import Home from "@/pages/Home";
 import About from "@/pages/About";
 import MarketIntelligence from "@/pages/MarketIntelligence";
 import ArticleDetail from "@/pages/ArticleDetail";
+import Privacy from "@/pages/Privacy";
 import TopPicks from "@/pages/TopPicks";
 import Contact from "@/pages/Contact";
 import Listings from "@/pages/Listings";
@@ -38,6 +40,7 @@ function PublicRouter() {
         <Route path="/about" component={About} />
         <Route path="/market-intelligence" component={MarketIntelligence} />
         <Route path="/intelligence/:slug" component={ArticleDetail} />
+        <Route path="/privacy" component={Privacy} />
         <Route path="/top-picks" component={TopPicks} />
         <Route path="/contact" component={Contact} />
         <Route path="/listings" component={Listings} />
@@ -93,14 +96,16 @@ function App() {
     <ErrorBoundary label="App">
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Switch>
-              <Route path="/admin/:rest*" component={AdminRouter} />
-              <Route path="/admin" component={AdminRouter} />
-              <Route component={PublicRouter} />
-            </Switch>
-          </WouterRouter>
-          <Toaster />
+          <SiteSettingsProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Switch>
+                <Route path="/admin/:rest*" component={AdminRouter} />
+                <Route path="/admin" component={AdminRouter} />
+                <Route component={PublicRouter} />
+              </Switch>
+            </WouterRouter>
+            <Toaster />
+          </SiteSettingsProvider>
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>
