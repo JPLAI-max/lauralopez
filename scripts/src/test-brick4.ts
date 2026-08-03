@@ -25,7 +25,9 @@ function ko(n: number, label: string, evidence: string) {
 
 async function get(path: string) {
   const r = await fetch(`${BASE}${path}`);
-  const body = r.ok ? await r.json().catch(() => ({})) : {};
+  const body: Record<string, unknown> = r.ok
+    ? (await r.json().catch(() => ({})) as Record<string, unknown>)
+    : {};
   return { status: r.status, body };
 }
 
@@ -182,7 +184,7 @@ async function main() {
   const soldProps = await get("/content/properties?status=sold");
   if (soldProps.status === 200) {
     ok(11, "Sold properties endpoint works — status=sold can be fetched",
-       `GET /content/properties?status=sold → 200, ${(soldProps.body.properties ?? []).length} records`);
+       `GET /content/properties?status=sold → 200, ${((soldProps.body.properties as unknown[]) ?? []).length} records`);
   } else {
     ko(11, "Sold properties endpoint failed", `status ${soldProps.status}`);
   }

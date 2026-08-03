@@ -27,20 +27,16 @@ const MIGRATIONS = [
   "0001_brick5_campaign_engine.sql",
 ];
 
-async function applyFile(client: Awaited<ReturnType<typeof pool.connect>>, filename: string) {
-  const sql = readFileSync(path.join(DRIZZLE_DIR, filename), "utf8");
-  console.log(`  ▸ applying ${filename}…`);
-  await client.query(sql);
-  console.log(`  ✓ ${filename} applied`);
-}
-
 async function run() {
   console.log("▶ migrate: applying schema migrations…");
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     for (const filename of MIGRATIONS) {
-      await applyFile(client, filename);
+      const sql = readFileSync(path.join(DRIZZLE_DIR, filename), "utf8");
+      console.log(`  ▸ applying ${filename}…`);
+      await client.query(sql);
+      console.log(`  ✓ ${filename} applied`);
     }
     await client.query("COMMIT");
     console.log("✅ All migrations applied successfully.");
@@ -53,7 +49,7 @@ async function run() {
   }
 }
 
-run().catch((err) => {
-  console.error("❌ Migration failed:", err.message ?? err);
+run().catch((err: unknown) => {
+  console.error("❌ Migration failed:", err instanceof Error ? err.message : err);
   process.exit(1);
 });
