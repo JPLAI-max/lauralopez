@@ -6,3 +6,4 @@
 - [Admin router bare path bug](admin-router-bare-path.md) — wouter :rest* does not match zero segments; bare /admin needs its own explicit route entry
 - [Express params cast](express-params-cast.md) — req.params destructure types as string|string[] in this monorepo; use `req.params['id'] as string` to satisfy drizzle eq() overloads
 - [Brick 6 contacts](brick6-contacts.md) — migration 0005 applied; contacts + contact_interactions tables live; contacts router mounted at /admin/contacts; no auto-subscribe rule enforced at API layer
+- [Adding workspace deps to laura-lopez](workspace-dep-add.md) — after adding a new @workspace/* dep to artifacts/laura-lopez/package.json, must run pnpm install AND restart the Vite workflow; Vite caches module resolution and the new symlink won't be picked up by HMR alone
