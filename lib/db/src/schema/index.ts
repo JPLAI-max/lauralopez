@@ -6,3 +6,5 @@ export * from "./content";
 export * from "./settings";
 export * from "./campaigns";
 export * from "./marketing";
+export * from "./intel-public";
+export * from "./intel-licensed";

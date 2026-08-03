@@ -62,8 +62,12 @@ function substitute(text: string, facts: PropertyFacts): string {
 /**
  * Returns true when no raw digit exists outside {{...}} placeholders.
  * Called on the PRE-substitution draft so placeholders are still intact.
+ *
+ * Exported so intelligence report generation can reuse the same validator
+ * without duplicating the logic. Report tokens use {{fact:uuid}} which is
+ * also matched by the /\{\{[^}]+\}\}/g strip before the digit check.
  */
-function noRawDigits(text: string): boolean {
+export function noRawDigits(text: string): boolean {
   const stripped = text.replace(/\{\{[^}]+\}\}/g, "");
   return !/\d/.test(stripped);
 }

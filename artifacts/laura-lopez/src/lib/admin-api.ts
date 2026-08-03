@@ -835,6 +835,79 @@ export const contactsApi = {
     apiFetch<ImportResult>("/admin/contacts/import", { method: "POST", json: { rows, dryRun } }),
 };
 
+// ---------------------------------------------------------------------------
+// Intelligence API (Brick 7)
+// ---------------------------------------------------------------------------
+export const intelApi = {
+  // Sources
+  listSources: () =>
+    apiFetch<{ sources: unknown[] }>("/admin/intel/sources"),
+  createSource: (body: { kind: string; title: string; url?: string | null; documentKey?: string | null; capturedAt: string; notes?: string | null }) =>
+    apiFetch<{ source: unknown }>("/admin/intel/sources", { method: "POST", json: body }),
+  deleteSource: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/admin/intel/sources/${id}`, { method: "DELETE" }),
+
+  // Ingest
+  ingest: (body: { type: "text" | "csv"; content: string; sourceTitle: string; sourceKind: string; sourceCapturedAt: string; sourceUrl?: string | null; sourceNotes?: string | null }) =>
+    apiFetch<{ type: string; extractedFacts?: unknown[]; headers?: string[]; preview?: string[][]; message: string }>("/admin/intel/ingest", { method: "POST", json: body }),
+  ingestConfirm: (body: { source: { kind: string; title: string; url?: string | null; capturedAt: string; notes?: string | null }; facts: unknown[] }) =>
+    apiFetch<{ source: unknown; facts: unknown[] }>("/admin/intel/ingest/confirm", { method: "POST", json: body }),
+
+  // Facts (parcel_events)
+  listFacts: () =>
+    apiFetch<{ facts: unknown[] }>("/admin/intel/facts"),
+  getFact: (id: string) =>
+    apiFetch<{ fact: unknown }>(`/admin/intel/facts/${id}`),
+  patchFact: (id: string, body: { eventType?: string; eventDate?: string; amount?: string | null; description?: string | null; confidence?: string }) =>
+    apiFetch<{ fact: unknown }>(`/admin/intel/facts/${id}`, { method: "PATCH", json: body }),
+  deleteFact: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/admin/intel/facts/${id}`, { method: "DELETE" }),
+
+  // Parcels
+  listParcels: () =>
+    apiFetch<{ parcels: unknown[] }>("/admin/intel/parcels"),
+  createParcel: (body: { address: string; apn?: string | null; city?: string | null; neighborhood?: string | null; zip?: string | null; lotSqft?: number | null }) =>
+    apiFetch<{ parcel: unknown }>("/admin/intel/parcels", { method: "POST", json: body }),
+
+  // MLS / licensed
+  listMlsTransactions: () =>
+    apiFetch<{ transactions: unknown[] }>("/admin/intel/mls-transactions"),
+  createMlsTransaction: (body: { dataSource: string; address: string; sourceId: string; [k: string]: unknown }) =>
+    apiFetch<{ transaction: unknown }>("/admin/intel/mls-transactions", { method: "POST", json: body }),
+  listOffMarketNotes: () =>
+    apiFetch<{ notes: unknown[] }>("/admin/intel/off-market-notes"),
+  createOffMarketNote: (body: { note: string; signalType: string; observedAt: string; [k: string]: unknown }) =>
+    apiFetch<{ note: unknown }>("/admin/intel/off-market-notes", { method: "POST", json: body }),
+
+  // Regulatory events
+  listRegulatoryEvents: () =>
+    apiFetch<{ events: unknown[] }>("/admin/intel/regulatory-events"),
+  createRegulatoryEvent: (body: { topic: string; title: string; summary: string; sourceId: string; effectiveDate?: string | null }) =>
+    apiFetch<{ event: unknown }>("/admin/intel/regulatory-events", { method: "POST", json: body }),
+
+  // Report templates
+  listReportTemplates: () =>
+    apiFetch<{ templates: unknown[] }>("/admin/intel/report-templates"),
+  createReportTemplate: (body: { key: string; name: string; sections?: unknown[] }) =>
+    apiFetch<{ template: unknown }>("/admin/intel/report-templates", { method: "POST", json: body }),
+
+  // Reports
+  listReports: () =>
+    apiFetch<{ reports: unknown[] }>("/admin/intel/reports"),
+  createReport: (body: { title: string; periodStart: string; periodEnd: string; neighborhood?: string | null; templateId?: string | null }) =>
+    apiFetch<{ report: { id: string; [k: string]: unknown } }>("/admin/intel/reports", { method: "POST", json: body }),
+  getReport: (id: string) =>
+    apiFetch<{ report: unknown; resolvedFacts: unknown; disclosure: string }>(`/admin/intel/reports/${id}`),
+  deleteReport: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/admin/intel/reports/${id}`, { method: "DELETE" }),
+  generateReport: (id: string) =>
+    apiFetch<{ report: unknown; factCount: number; refsUsed: number }>(`/admin/intel/reports/${id}/generate`, { method: "POST" }),
+  approveReport: (id: string) =>
+    apiFetch<{ report: unknown }>(`/admin/intel/reports/${id}/approve`, { method: "POST" }),
+  publishReport: (id: string) =>
+    apiFetch<{ report: unknown; article: unknown }>(`/admin/intel/reports/${id}/publish`, { method: "POST" }),
+};
+
 export const campaignApi = {
   templates: {
     list: () =>

@@ -1,0 +1,256 @@
+BRICK 7 — INTELLIGENCE FACT STORE & REPORT GENERATOR
+
+The core rule: the agent never generates a number.
+
+Every figure in a published report traces to a stored fact with
+a source. The model writes narrative around pinned facts and is
+structurally prevented from inventing any of them. This is the
+same guard as campaign copy, applied to a higher-stakes surface.
+
+ownerId notNull indexed, officeId nullable, on every table.
+Every read/update/delete filters on ownerId. Report reference
+counts.
+
+════════════════════════════════════════
+1. THE TWO-STORE SPLIT — decide this correctly, once
+════════════════════════════════════════
+Two separate schemas. This is not a style preference.
+
+MLS-licensed data may not be repurposed into a separate
+commercial product. Public-record data — deeds, permits,
+entitlements, parcels — is not restricted. If both live in one
+table the portable dataset is contaminated and cannot be
+untangled later.
+
+  lib/db/src/schema/intel-public.ts    PORTABLE
+  lib/db/src/schema/intel-licensed.ts  LAURA-ONLY
+
+Every licensed table carries:
+  dataSource      text notNull       // 'crmls' | 'brokerage'
+  licenseRestricted boolean notNull default true
+
+No query may join across the two schemas into a single exportable
+result. Reports read from both; only the public store is ever
+exportable. Enforce with a comment block at the top of each file
+stating the rule.
+
+════════════════════════════════════════
+2. SCHEMA — intel-public.ts
+════════════════════════════════════════
+parcels
+  id, ownerId, officeId
+  apn              text nullable      // assessor parcel number
+  address          text notNull
+  city, neighborhood, zip
+  lotSqft          integer nullable
+  latitude, longitude  numeric nullable
+  createdAt, updatedAt
+  index on neighborhood, apn
+
+parcel_events      -- the portable dataset. THIS is the asset.
+  id, ownerId, parcelId cascade
+  eventType        text notNull
+                   // deed_transfer | permit_filed |
+                   // permit_issued | entitlement | listing |
+                   // price_change | sale | withdrawal
+  eventDate        date notNull
+  amount           numeric(14,2) nullable
+  description      text nullable
+  sourceId         uuid notNull -> intel_sources.id
+  confidence       text notNull default 'reported'
+                   // verified | reported | estimated
+  payload          jsonb notNull default '{}'
+  createdAt
+  index on parcelId, eventType, eventDate
+
+intel_sources      -- provenance. Every fact points here.
+  id, ownerId
+  kind             text notNull
+                   // manual | document | url | feed | recorder |
+                   // permit_portal
+  title            text notNull
+  url              text nullable
+  documentKey      text nullable      // R2
+  capturedAt       timestamptz notNull
+  notes            text nullable
+
+regulatory_events  -- Prop 19, FIRPTA, FinCEN, AB38, etc.
+  id, ownerId, officeId
+  topic            text notNull
+  title            text notNull
+  effectiveDate    date nullable
+  summary          text notNull
+  sourceId         uuid notNull -> intel_sources.id
+  createdAt
+
+════════════════════════════════════════
+3. SCHEMA — intel-licensed.ts
+════════════════════════════════════════
+mls_transactions
+  id, ownerId, officeId
+  dataSource       text notNull
+  licenseRestricted boolean notNull default true
+  mlsNumber        text nullable
+  address          text notNull
+  neighborhood     text nullable
+  listPrice, soldPrice   numeric(14,2) nullable
+  listDate, soldDate     date nullable
+  daysOnMarket     integer nullable
+  beds, baths      numeric nullable
+  sqft, lotSqft    integer nullable
+  yearBuilt        integer nullable
+  listingBrokerage text nullable
+  sourceId         uuid notNull -> intel_sources.id
+  createdAt
+  index on neighborhood, soldDate
+
+off_market_notes   -- Laura's proprietary flow. Highest value.
+  id, ownerId, officeId
+  address, neighborhood
+  note             text notNull
+  signalType       text notNull
+                   // coming_soon | quiet_listing | owner_intent |
+                   // distress | development
+  confidence       text notNull default 'reported'
+  observedAt       date notNull
+  createdAt
+
+  Never appears in any published report without explicit
+  per-item inclusion. Default excluded.
+
+════════════════════════════════════════
+4. INGEST — manual drop first
+════════════════════════════════════════
+POST /api/admin/intel/ingest
+
+Accepts: pasted text, uploaded PDF, uploaded CSV.
+
+Pipeline:
+  a. Create an intel_sources row FIRST. Nothing enters the fact
+     store without a source. No exceptions.
+  b. Extract candidate facts. For PDFs and pasted text, use the
+     Anthropic API to STRUCTURE the content — not to interpret
+     it. The model's job is to identify "this line contains an
+     address, a date, and a dollar amount" and emit structured
+     JSON. It must never supply a value not present in the input.
+  c. Present extracted facts in a REVIEW TABLE before anything
+     is written. Every row editable. Laura confirms or rejects
+     each.
+  d. On confirm, write facts with sourceId and confidence.
+
+Extraction must return, per fact, the exact source snippet it
+came from. Store it in payload.sourceSnippet. If a field cannot
+be traced to a snippet, it is dropped, not guessed.
+
+CSV path skips the model entirely — column mapping preview,
+then direct write.
+
+════════════════════════════════════════
+5. REPORT GENERATION
+════════════════════════════════════════
+report_templates
+  id, ownerId, key, name, sections jsonb, createdAt
+  Types: monthly_intelligence | neighborhood_report |
+         regulatory_alert
+
+reports
+  id, ownerId, officeId
+  templateId, title, periodStart, periodEnd
+  neighborhood     text nullable
+  status           text notNull default 'draft'
+                   // draft | in_review | approved | published
+  bodyMarkdown     text notNull
+  factRefs         jsonb notNull     // [{factId, table, token}]
+  articleId        uuid nullable -> articles.id
+  generatedAt, approvedAt, publishedAt
+
+GENERATION RULES — non-negotiable:
+
+  a. Query the fact store for the period and scope. Assemble a
+     FACT SET with a stable token per fact: {{fact:uuid}}.
+  b. Pass facts to the model as structured data. Instruct it to
+     write analysis referencing tokens, NEVER literal numbers.
+  c. REJECT any draft containing a digit outside a token. Retry
+     once with a corrective instruction. Then surface the
+     failure with both drafts. Same pattern as
+     campaign-copy-gen.ts — reuse that validator, do not write a
+     second one.
+  d. Substitute real values AFTER validation.
+  e. Store factRefs so every figure in the published report is
+     traceable to its source row in one click.
+
+If the fact set for a period is empty or thin, generation must
+REFUSE with "Insufficient facts for this period" rather than
+producing a report padded with generalities. A market report
+with no data is worse than no report.
+
+════════════════════════════════════════
+6. REVIEW QUEUE
+════════════════════════════════════════
+/admin/intelligence
+
+  Draft view: rendered report with every substituted figure
+  visually marked. Click a figure -> side panel showing the fact
+  row, its source, capture date, and confidence.
+
+  Per-section approve / edit / reject. Editing a figure edits
+  the FACT, not the prose — and flags every other report using
+  that fact.
+
+  Approve -> status approved. Publish -> creates an articles row
+  (Brick 4) with status published, linked via articleId.
+
+  Nothing auto-publishes. Ever.
+
+════════════════════════════════════════
+7. DISCLOSURE
+════════════════════════════════════════
+Every published report footer, as a component constant:
+
+  "Prepared from public records, MLS data, and market
+   observation. Figures are believed accurate as of the date
+   shown. Not tax, legal, or investment advice — consult your
+   own advisors."
+
+Reports drawing on licensed data show the source attribution
+required by the data license.
+
+════════════════════════════════════════
+8. NOT NOW
+════════════════════════════════════════
+Build NO crawler in this brick. No RESO/MLS feed integration.
+No scheduled jobs. Manual ingest only.
+
+The point of this brick is proving the fact-to-report pipeline
+end to end. Automated ingest is Brick 8 and depends on Laura's
+MLS data-feed agreement, which does not exist yet.
+
+════════════════════════════════════════
+ACCEPTANCE
+════════════════════════════════════════
+1.  typecheck clean.
+2.  ownerId reference count per new route file >= its query
+    count. Report numbers.
+3.  Paste a block of text with 3 sales -> review table shows 3
+    extracted facts, each with its source snippet.
+4.  Edit one extracted value before confirming -> the edited
+    value is what gets stored.
+5.  A fact cannot be written without a sourceId. Attempt it and
+    show the failure.
+6.  Generate a monthly report from those facts -> every figure
+    in the output traces to a stored fact.
+7.  A draft containing a digit outside a token is REJECTED,
+    retried once, then surfaced. Show it.
+8.  Generate for a period with zero facts -> REFUSES with
+    "Insufficient facts", produces nothing.
+9.  Click a figure in the review view -> source panel shows
+    title, capture date, and confidence.
+10. Approve and publish -> an articles row appears with status
+    published and the report renders on the public site.
+11. off_market_notes do NOT appear in a generated report unless
+    explicitly included per item.
+12. Confirm no query joins intel-licensed and intel-public into
+    one exportable result. Report how this is enforced.
+13. Intelligence admin usable at 375px.
+
+Report each with evidence.
