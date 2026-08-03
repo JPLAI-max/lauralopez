@@ -2,3 +2,5 @@
 - [Port layout & dev proxy](port-layout.md) — API on localPort 8080 (externalPort 80), frontend on localPort 19969 (externalPort 3000); API_PROXY_TARGET=http://localhost:8080
 - [TOTP decrypt layout](totp-crypto-layout.md) — AES-256-GCM stored as `iv_hex.authTag_hex.ciphertext_hex`; salt = `"totp-secret-key-v1"`
 - [Test runner for api-server](test-runner.md) — api-server has no tsx dep; run tests via scripts package tsx binary at `scripts/node_modules/.bin/tsx`
+- [Admin auth cookie fallbacks](admin-auth-cookie-fallbacks.md) — Chrome blocks SameSite=None cookies in cross-origin iframes; both pending and session tokens need header fallbacks
+- [Admin router bare path bug](admin-router-bare-path.md) — wouter :rest* does not match zero segments; bare /admin needs its own explicit route entry
