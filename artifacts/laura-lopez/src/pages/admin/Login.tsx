@@ -103,7 +103,10 @@ export default function AdminLogin() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-primary text-primary-foreground py-2 text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="w-full py-2 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "#F4C3CC", color: "#2a0a10" }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#f0adb9")}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#F4C3CC")}
               >
                 {loading ? "Signing in…" : "Sign In"}
               </button>
@@ -134,7 +137,10 @@ export default function AdminLogin() {
               <button
                 type="submit"
                 disabled={loading || totpCode.length < 6}
-                className="w-full bg-primary text-primary-foreground py-2 text-sm uppercase tracking-wider hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="w-full py-2 text-sm uppercase tracking-wider transition-colors disabled:opacity-50"
+                style={{ backgroundColor: "#F4C3CC", color: "#2a0a10" }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#f0adb9")}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#F4C3CC")}
               >
                 {loading ? "Verifying…" : "Verify"}
               </button>
