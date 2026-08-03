@@ -4,3 +4,4 @@ export * from "./transactions";
 export * from "./content";
 export * from "./settings";
 export * from "./campaigns";
+export * from "./marketing";

@@ -8,6 +8,7 @@ import {
   date,
   jsonb,
   index,
+  // numeric not needed here but imported for symmetry
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { propertiesTable } from "./content";
@@ -72,9 +73,12 @@ export const campaignAssetsTable = pgTable(
     storageKey:  text("storage_key"),                           // R2 key for images/PDFs
     textContent: text("text_content"),                          // captions, scripts, copy
     status:      text("status").notNull().default("draft"),     // draft | approved | rejected
-    approvedAt:  timestamp("approved_at", { withTimezone: true }),
-    approvedBy:  text("approved_by"),
-    createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    approvedAt:       timestamp("approved_at", { withTimezone: true }),
+    approvedBy:       text("approved_by"),
+    // Brick 5.2 — marketing template provenance (nullable for Brick 5 assets)
+    templateId:       uuid("template_id"),
+    templateVersion:  integer("template_version"),
+    createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("campaign_assets_owner_id_idx").on(t.ownerId),

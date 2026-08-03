@@ -3,10 +3,10 @@ import {
   db,
   campaignsTable, campaignTasksTable, campaignEventsTable, campaignAssetsTable,
   campaignTemplatesTable, campaignTemplateItemsTable,
-  propertiesTable, mediaTable,
-  settingsTable,
+  propertiesTable, mediaTable, propertyMediaTable,
+  settingsTable, marketingTemplatesTable,
 } from "@workspace/db";
-import { eq, and, asc, desc, inArray, isNull } from "drizzle-orm";
+import { eq, and, asc, desc, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { computeMilestoneDate } from "../../lib/dates";
 import { logger } from "../../lib/logger";
@@ -15,6 +15,13 @@ import { isConfigured, publicUrl, getObjectBuffer } from "../../lib/storage";
 import { generateCampaignImage } from "../../lib/campaign-image-gen";
 import { generateCampaignCopy, type CopyChannel } from "../../lib/campaign-copy-gen";
 import { generateCampaignPdf, type PdfChannel } from "../../lib/campaign-pdf-gen";
+import {
+  generateMarketingImage,
+  generateInstagramCaption,
+  selectBestPhoto,
+  extractCity,
+  type GalleryEntry,
+} from "../../lib/campaign-marketing-gen";
 
 const router: IRouter = Router();
 
@@ -519,11 +526,168 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
     commentary: property.commentary,
   };
 
-  let storageKey:  string | null = null;
-  let textContent: string | null = null;
-  let assetType:   string        = task.assetType ?? task.channel;
+  let storageKey:       string | null = null;
+  let textContent:      string | null = null;
+  let assetType:        string        = task.assetType ?? task.channel;
+  let mktTemplateId:    string | null = null;
+  let mktTemplateVer:   number | null = null;
 
   try {
+    // ── INSTAGRAM STORY / POST via marketing templates ─────────────────────
+    // Checked FIRST. If an active marketing_template exists for this channel
+    // (or the caller supplies a templateId), we render the BHE brand image.
+    // If no template is found we fall through to the legacy image/copy branch.
+    let handledByMarketing = false;
+
+    if (task.channel === "instagram_story" || task.channel === "instagram_post") {
+      const reqBody = req.body as { templateId?: string; templateVersion?: number };
+
+      // Resolve template: explicit override → active system template → any active
+      let mktTemplate = null as typeof import("@workspace/db").marketingTemplatesTable.$inferSelect | null;
+
+      if (reqBody.templateId) {
+        // Explicit override: must be active, channel-compatible, and system- or user-owned
+        const rows = await db
+          .select()
+          .from(marketingTemplatesTable)
+          .where(and(
+            eq(marketingTemplatesTable.id,        reqBody.templateId),
+            eq(marketingTemplatesTable.isActive,  true),
+            eq(marketingTemplatesTable.channel,   task.channel),
+            or(
+              isNull(marketingTemplatesTable.ownerId),
+              eq(marketingTemplatesTable.ownerId, ownerId),
+            ),
+          ))
+          .limit(1);
+        mktTemplate = rows[0] ?? null;
+        if (!mktTemplate) {
+          res.status(422).json({
+            error: `Template "${reqBody.templateId}" not found, is inactive, does not match channel "${task.channel}", or is not accessible.`,
+          });
+          return;
+        }
+      } else {
+        // Prefer system templates (ownerId null) for the channel
+        const rows = await db
+          .select()
+          .from(marketingTemplatesTable)
+          .where(and(
+            eq(marketingTemplatesTable.channel, task.channel),
+            eq(marketingTemplatesTable.isActive, true),
+            isNull(marketingTemplatesTable.ownerId),
+          ))
+          .limit(1);
+        mktTemplate = rows[0] ?? null;
+
+        if (!mktTemplate) {
+          // Fall back to any active template for this channel accessible to caller
+          const rows2 = await db
+            .select()
+            .from(marketingTemplatesTable)
+            .where(and(
+              eq(marketingTemplatesTable.channel, task.channel),
+              eq(marketingTemplatesTable.isActive, true),
+              or(
+                isNull(marketingTemplatesTable.ownerId),
+                eq(marketingTemplatesTable.ownerId, ownerId),
+              ),
+            ))
+            .limit(1);
+          mktTemplate = rows2[0] ?? null;
+        }
+      }
+
+      if (mktTemplate) {
+        if (!isConfigured()) {
+          res.status(503).json({ error: "Storage not configured — cannot generate marketing images." });
+          return;
+        }
+
+        // Load property gallery + heroMedia for best-fit photo selection
+        const galleryRows = await db
+          .select({ mediaId: propertyMediaTable.mediaId })
+          .from(propertyMediaTable)
+          .where(eq(propertyMediaTable.propertyId, campaign.propertyId));
+
+        const mediaIds = galleryRows.length > 0
+          ? galleryRows.map((r) => r.mediaId)
+          : property.heroMediaId ? [property.heroMediaId] : [];
+
+        if (mediaIds.length === 0) {
+          res.status(422).json({ error: "Property has no media — cannot generate marketing image." });
+          return;
+        }
+
+        const mediaRows = await db
+          .select()
+          .from(mediaTable)
+          .where(and(eq(mediaTable.ownerId, ownerId)));
+
+        const gallery: GalleryEntry[] = mediaRows
+          .filter((m) => mediaIds.includes(m.id))
+          .map((m) => ({
+            mediaId:     m.id,
+            aspectRatio: m.aspectRatio as string,
+            width:       m.width,
+            height:      m.height,
+            focalX:      m.focalX as string,
+            focalY:      m.focalY as string,
+            storageKey:  m.storageKey,
+          }));
+
+        const targetAspect  = parseFloat(mktTemplate.photoAspect as string);
+        const photoByAspect = selectBestPhoto(gallery, targetAspect);
+
+        if (!photoByAspect) {
+          res.status(422).json({ error: "No suitable photo found for this template." });
+          return;
+        }
+
+        const sourceBuffer = await getObjectBuffer(photoByAspect.storageKey);
+        const city         = extractCity(property.address);
+
+        // Headline derived from campaign trigger (agent can override via templateId later)
+        const TRIGGER_HEADLINE: Record<string, string> = {
+          new_listing:  "JUST LISTED",
+          price_change: "PRICE IMPROVED",
+          open_house:   "OPEN TODAY",
+          sold:         "JUST SOLD",
+        };
+        const headline = TRIGGER_HEADLINE[campaign.trigger] ?? "NEW LISTING";
+
+        const fields = {
+          headline,
+          address:       property.address,
+          city,
+          price:         priceStr ?? "",
+          roleLine:      "LISTED BY",
+          agentName,
+          brokerageMark: brokerageName,
+        };
+
+        const result = await generateMarketingImage({
+          template:     mktTemplate,
+          fields,
+          sourceBuffer,
+          srcWidth:     photoByAspect.width,
+          srcHeight:    photoByAspect.height,
+          focalX:       parseFloat(photoByAspect.focalX),
+          focalY:       parseFloat(photoByAspect.focalY),
+          dreLicense,
+          brokerageName,
+        });
+
+        storageKey    = result.storageKey;
+        textContent   = result.caption;  // caption (DRE appended) stored as textContent
+        assetType     = task.channel;    // "instagram_story" | "instagram_post"
+        mktTemplateId = mktTemplate.id;
+        mktTemplateVer = mktTemplate.version;
+        handledByMarketing = true;
+      }
+    }
+
+    if (!handledByMarketing) {
     // ── IMAGE ─────────────────────────────────────────────────────────────
     if (task.assetType === "image_1x1" || task.assetType === "image_9x16") {
       if (!isConfigured()) {
@@ -622,6 +786,7 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
       });
       return;
     }
+    } // end !handledByMarketing
   } catch (err: unknown) {
     const e = err as { code?: string; message?: string };
     logger.error({ err, taskId }, "asset generation failed");
@@ -630,6 +795,10 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
       return;
     }
     if (e.code === "SETTING_MISSING") {
+      res.status(422).json({ error: e.message, code: e.code });
+      return;
+    }
+    if (e.code === "MISSING_TEMPLATE_FIELD") {
       res.status(422).json({ error: e.message, code: e.code });
       return;
     }
@@ -642,12 +811,14 @@ router.post("/campaign-tasks/:taskId/generate", async (req: Request, res: Respon
     .insert(campaignAssetsTable)
     .values({
       ownerId,
-      campaignId:  task.campaignId,
-      taskId:      task.id,
+      campaignId:       task.campaignId,
+      taskId:           task.id,
       assetType,
-      storageKey:  storageKey ?? null,
-      textContent: textContent ?? null,
-      status:      "draft",            // never auto-approve
+      storageKey:       storageKey ?? null,
+      textContent:      textContent ?? null,
+      status:           "draft",            // never auto-approve
+      templateId:       mktTemplateId,
+      templateVersion:  mktTemplateVer,
     })
     .returning();
 

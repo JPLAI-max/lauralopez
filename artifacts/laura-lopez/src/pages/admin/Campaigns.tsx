@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   campaignApi,
+  marketingTemplateApi,
   type CampaignSummary,
   type Campaign,
   type CampaignTask,
   type CampaignAsset,
   type AdminProperty,
   type CampaignChannel,
+  type MarketingTemplate,
   ApiError,
 } from "@/lib/admin-api";
 import {
@@ -253,7 +255,12 @@ function TaskDetail({
   });
 
   const generate = useMutation({
-    mutationFn: () => campaignApi.tasks.generate(taskId),
+    mutationFn: () => campaignApi.tasks.generate(
+      taskId,
+      selectedTemplateId
+        ? { templateId: selectedTemplateId, templateVersion: selectedTemplateVersion ?? undefined }
+        : undefined,
+    ),
     onSuccess:  () => { setGenError(""); void qc.invalidateQueries({ queryKey: ["campaign", campaignId] }); },
     onError:    (e) => setGenError(e instanceof ApiError ? e.message : "Generation failed."),
   });
@@ -297,7 +304,12 @@ function TaskDetail({
 
   const asset = (data.assets as CampaignAsset[]).find((a) => a.taskId === taskId);
   const eff   = task.overrideDate ?? task.computedDate;
-  const isVoicemail = task.channel === "voicemail";
+  const isVoicemail  = task.channel === "voicemail";
+  const isInstagram  = INSTAGRAM_CHANNELS.has(task.channel);
+
+  // Template picker state (instagram channels only)
+  const [selectedTemplateId,      setSelectedTemplateId]      = useState<string | null>(null);
+  const [selectedTemplateVersion, setSelectedTemplateVersion] = useState<number | null>(null);
 
   return (
     <div className="space-y-4">
@@ -375,13 +387,28 @@ function TaskDetail({
         )}
 
         {!asset && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="text-xs text-muted-foreground">No asset generated yet.</p>
+
+            {/* Template picker for instagram channels */}
+            {isInstagram && data.property?.id && (
+              <MarketingTemplatePicker
+                channel={task.channel}
+                propertyId={(data.property as AdminProperty).id}
+                selectedId={selectedTemplateId}
+                onSelect={(id, ver) => {
+                  setSelectedTemplateId(id);
+                  setSelectedTemplateVersion(ver);
+                }}
+              />
+            )}
+
             {task.channel !== "manual" && (
               <button
                 onClick={() => generate.mutate()}
-                disabled={generate.isPending}
+                disabled={generate.isPending || (isInstagram && !selectedTemplateId)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground font-sans text-xs uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50"
+                title={isInstagram && !selectedTemplateId ? "Select a template above first" : undefined}
               >
                 <RefreshCw size={12} className={generate.isPending ? "animate-spin" : ""} />
                 {generate.isPending ? "Generating…" : "Generate Asset"}
@@ -498,6 +525,97 @@ function TaskDetail({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MarketingTemplatePicker — shown in TaskDetail for instagram channels
+// ---------------------------------------------------------------------------
+const INSTAGRAM_CHANNELS = new Set(["instagram_story", "instagram_post"]);
+
+function MarketingTemplatePicker({
+  channel,
+  propertyId,
+  selectedId,
+  onSelect,
+}: {
+  channel: string;
+  propertyId: string;
+  selectedId: string | null;
+  onSelect: (id: string, version: number) => void;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["marketing-templates", channel],
+    queryFn:  () => marketingTemplateApi.list(channel),
+    staleTime: 5 * 60_000,
+  });
+
+  const templates: MarketingTemplate[] = data?.templates ?? [];
+
+  // Fetch thumbnails for all templates in parallel
+  const previews = useQueries({
+    queries: templates.map((t) => ({
+      queryKey:  ["mkt-preview", t.id, propertyId],
+      queryFn:   () => marketingTemplateApi.preview(t.id, propertyId),
+      staleTime: 5 * 60_000,
+      retry:     false,
+    })),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <RefreshCw size={11} className="animate-spin" /> Loading templates…
+      </div>
+    );
+  }
+  if (templates.length === 0) return null;
+
+  const isStory = channel === "instagram_story";
+
+  return (
+    <div className="space-y-2">
+      <p className="font-sans text-[10px] uppercase tracking-widest text-muted-foreground">
+        Template — select one
+      </p>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {templates.map((t, i) => {
+          const preview   = previews[i];
+          const active    = t.id === selectedId;
+          const aspect    = isStory ? "aspect-[9/16]" : "aspect-square";
+          return (
+            <button
+              key={t.id}
+              onClick={() => onSelect(t.id, t.version)}
+              className={`shrink-0 w-24 space-y-1 p-1 border rounded-sm text-left transition-all ${
+                active
+                  ? "border-primary ring-1 ring-primary/60 bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              }`}
+            >
+              <div className={`w-full bg-muted rounded-sm overflow-hidden ${aspect}`}>
+                {preview?.data?.image ? (
+                  <img
+                    src={preview.data.image}
+                    alt={t.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    {preview?.isLoading ? (
+                      <RefreshCw size={10} className="animate-spin text-muted-foreground" />
+                    ) : (
+                      <Instagram size={14} className="text-muted-foreground/40" />
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] leading-tight text-foreground truncate px-0.5">{t.name}</p>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

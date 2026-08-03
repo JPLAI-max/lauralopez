@@ -6,13 +6,15 @@ set -e
 echo "▶ post-merge: installing dependencies…"
 pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 
-echo "▶ post-merge: applying Brick 5 additive migration…"
-# Paths are relative to scripts/ (pnpm exec changes cwd to the package root).
-# 0001_brick5_campaign_engine.sql uses CREATE TABLE IF NOT EXISTS — idempotent.
+echo "▶ post-merge: applying migrations (Bricks 1–5.2)…"
+# All migration files use CREATE TABLE IF NOT EXISTS — idempotent.
 pnpm --filter @workspace/scripts exec tsx src/migrate-brick5.ts
 
 echo "▶ post-merge: seeding default campaign template…"
 pnpm --filter @workspace/scripts exec tsx src/seed-campaigns.ts
+
+echo "▶ post-merge: seeding marketing templates (Brick 5.2)…"
+pnpm --filter @workspace/scripts exec tsx src/seed-marketing-templates.ts
 
 echo "▶ post-merge: rebuilding shared libs…"
 pnpm --filter @workspace/db exec tsc --build

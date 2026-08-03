@@ -2,14 +2,15 @@
  * Full migration runner — applies the complete ordered schema.
  *
  * Migration sequence:
- *   0000_woozy_titania.sql          — Brick 1–4 baseline (IF NOT EXISTS, safe on existing DBs)
- *   0001_brick5_campaign_engine.sql — Brick 5 additive  (IF NOT EXISTS, safe on existing DBs)
+ *   0000_woozy_titania.sql              — Brick 1–4 baseline (IF NOT EXISTS, safe on existing DBs)
+ *   0001_brick5_campaign_engine.sql     — Brick 5 additive  (IF NOT EXISTS, safe on existing DBs)
+ *   0002_brick52_marketing_templates.sql — Brick 5.2 additive (IF NOT EXISTS)
  *
- * Both files use CREATE TABLE IF NOT EXISTS, so this runner is fully
- * idempotent and safe to apply against:
+ * All files use CREATE TABLE IF NOT EXISTS / ALTER TABLE ADD COLUMN IF NOT EXISTS,
+ * so this runner is fully idempotent and safe to apply against:
  *   • a fresh database        — creates every table in order
- *   • an existing Brick 1–4 DB — 0000 is a no-op; 0001 creates the 7 new tables
- *   • an already-migrated DB  — both files are no-ops
+ *   • an existing Brick 1–4 DB — 0000 is a no-op; 0001/0002 create the new tables
+ *   • an already-migrated DB  — all files are no-ops
  *
  * Run: scripts/node_modules/.bin/tsx src/migrate-brick5.ts
  */
@@ -25,6 +26,7 @@ const DRIZZLE_DIR = path.join(__dirname, "../../lib/db/drizzle");
 const MIGRATIONS = [
   "0000_woozy_titania.sql",
   "0001_brick5_campaign_engine.sql",
+  "0002_brick52_marketing_templates.sql",
 ];
 
 async function run() {

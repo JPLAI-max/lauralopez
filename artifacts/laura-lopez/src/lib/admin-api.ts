@@ -600,18 +600,41 @@ export interface CampaignTask {
 }
 
 export interface CampaignAsset {
-  id:          string;
-  ownerId:     string;
-  campaignId:  string;
-  taskId:      string;
-  assetType:   string;
-  storageKey:  string | null;
-  textContent: string | null;
-  status:      AssetStatus;
-  approvedAt:  string | null;
-  approvedBy:  string | null;
-  createdAt:   string;
-  url?:        string | null;
+  id:              string;
+  ownerId:         string;
+  campaignId:      string;
+  taskId:          string;
+  assetType:       string;
+  storageKey:      string | null;
+  textContent:     string | null;
+  status:          AssetStatus;
+  approvedAt:      string | null;
+  approvedBy:      string | null;
+  // Brick 5.2 — marketing template provenance
+  templateId:      string | null;
+  templateVersion: number | null;
+  createdAt:       string;
+  url?:            string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Marketing template types (Brick 5.2)
+// ---------------------------------------------------------------------------
+export interface MarketingTemplate {
+  id:             string;
+  ownerId:        string | null;
+  officeId:       string | null;
+  key:            string;
+  name:           string;
+  channel:        string;
+  version:        number;
+  canvasWidth:    number;
+  canvasHeight:   number;
+  definition:     unknown;
+  requiredFields: string[];
+  photoAspect:    string;
+  isActive:       boolean;
+  createdAt:      string;
 }
 
 export interface CampaignPreviewTask {
@@ -631,6 +654,21 @@ export interface CampaignPreviewResponse {
   anchorDate: string;
   tasks:      CampaignPreviewTask[];
 }
+
+// ---------------------------------------------------------------------------
+// Marketing Template API (Brick 5.2)
+// ---------------------------------------------------------------------------
+export const marketingTemplateApi = {
+  list: (channel?: string) => {
+    const qs = channel ? `?channel=${encodeURIComponent(channel)}` : "";
+    return apiFetch<{ templates: MarketingTemplate[] }>(`/admin/marketing-templates${qs}`);
+  },
+  preview: (id: string, propertyId: string, opts?: { headline?: string; roleLine?: string }) =>
+    apiFetch<{ image: string; caption: string }>(
+      `/admin/marketing-templates/${id}/preview`,
+      { method: "POST", json: { propertyId, ...opts } },
+    ),
+};
 
 // ---------------------------------------------------------------------------
 // Campaign API client
@@ -675,8 +713,11 @@ export const campaignApi = {
   tasks: {
     patch: (taskId: string, body: { overrideDate?: string | null; status?: TaskStatus; notes?: string | null }) =>
       apiFetch<{ task: CampaignTask }>(`/admin/campaign-tasks/${taskId}`, { method: "PATCH", json: body }),
-    generate: (taskId: string) =>
-      apiFetch<{ asset: CampaignAsset }>(`/admin/campaign-tasks/${taskId}/generate`, { method: "POST" }),
+    generate: (taskId: string, body?: { templateId?: string; templateVersion?: number }) =>
+      apiFetch<{ asset: CampaignAsset }>(`/admin/campaign-tasks/${taskId}/generate`, {
+        method: "POST",
+        json: body ?? {},
+      }),
     approve: (taskId: string) =>
       apiFetch<{ asset: CampaignAsset }>(`/admin/campaign-tasks/${taskId}/approve`, { method: "POST" }),
     reject: (taskId: string) =>
